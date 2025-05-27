@@ -1,0 +1,321 @@
+# File: config.yaml
+# Sample configuration demonstrating datastores and a pipeline
+datastores:
+  - name: db1
+    type: postgres
+    host: localhost
+    port: 5432
+    username: postgres
+    password: postgres
+    database: postgres
+
+  - name: db2
+    type: mysql
+    host: localhost
+    port: 3306
+    username: mysql
+    password: mysql
+    database: mysqldb
+
+  - name: db3
+    type: clickhouse
+    host: localhost
+    port: 8236
+    username: clickhouse
+    password: clickhouse
+    database: clickhousedb
+  
+  - name: webhook1
+    type: webhook
+    base_url: 'http://mybaseurl'
+
+  - name: nats_source
+    type: nats
+    servers:
+      - "nats://localhost:4222"
+    token: "your_nats_token"
+    # subject: "user.events"
+    # queue: "event_routing"
+    # max_msgs: 200
+    # per_msg_timeout: 2.0
+    # total_timeout: 30.0
+
+externalstores:
+  - name: redis1
+    type: redis
+    host: redis.host.local
+    port: 6379
+    db: 1
+  - name: http1
+    type: http
+    url: "http://myurl.com"
+
+
+pipelines:
+  - name: data_move_db1_users_to_db2_users
+    source:
+      datastore: db1
+      batch_size: 100
+      table:
+        table: users
+        alias: u    # optional
+        dbschema: public #optional
+      joins:  # optional
+        - table: orders
+          alias: o
+          type: left
+          on: "users.id = o.user_id"
+        - table: payments
+          alias: p
+          type: right
+          on: "users.id = p.user_id"
+      filters:  # optional
+        - column : 'u.active'
+          operator: '='
+          value: TRUE
+        - column : 'u.status'
+          operator: '='
+          value: 'success'
+        - column : 'o.total'
+          operator: '>'
+          value: 1000
+      fields:     # optional
+        - column: 'u.name'
+          dtype: 'str'  # optional if not given infer from json
+          alias: 'name'    #optional
+        - column: 'u.id'
+          dtype: 'int'     # supported dtype int, float, datetime, string, date
+        - column: 'o.total'
+          dtype: 'float'
+
+    sink:
+      datastore: db2
+      table: users
+      dbschema: 'myschema' #optional
+      batch_size: 100
+      merge_strategy:
+        strategy: delete_insert  # delete_insert: delete before insert; upsert: insert or update; collapse: add nullify row before insert
+        allow_delete: true
+      unique_key:
+        - sname
+        - sid
+      filters:  #optional
+        - column : 'order_total'
+          operator: '>'
+          value: 1000
+      fields:  
+        - column: 'sname'
+          dtype: 'str'
+          source_column: 'u.name'
+        - column: 'sid'
+          dtype: 'int'
+          source_column: 'u.id'
+        - column: 'order_total'
+          dtype: 'float'
+          source_column: 'o.total'
+        - column: 'template_column'   # templated column parsed using jinja
+          dtype: 'str'
+          source_column: 'TMPL({{ name }} - ${{ o__total }})' jinja template if preceeded by TMPL
+        - column: 'function_column'   # templated column parsed using jinja
+          dtype: 'str'
+          source_column: 'lambda r: 1 if r["o__total"]>1000 else 0' # lambda function evaluated in python
+        - column: 'redis_name'
+          dtype: 'str'
+          source_column: 'ename'
+          source: redis1
+        - column: 'http_name'
+          dtype: 'str'
+          source_column: 'http_name'
+          source: http1
+
+    sourcestate:
+      use_source: true   # if use_source is true then only hash_column field is required
+      datastore: db2 # optional if use_source is true
+      table: users_state  # optional if use_source is true
+      dbschema: 'myschema' #optional
+      filters:  #optional
+        - column : 'deleted'
+          operator: '='
+          value: 'FALSE'
+      fields: #optional
+        - column: 'uid'
+          dtype: 'int'
+          source_column: 'u.id'
+        - column: 'mname'
+          dtype: 'str'
+          source_column: 'u.name'
+        - column: checksum
+          dtype: str     # optional should be same as required by reconcillation strategy
+
+    sinkstate:
+      use_sink: false    # if use_source is true then only hash_column field is required
+      datastore: db2  #optional if use_sink is true
+      table: users
+      dbschema: 'myschema'  #optional
+      filters:  # optional
+        - column : 'deleted'
+          operator: '='
+          value: FALSE
+      fields:   # optional
+        - column: 'mid'
+          dtype: 'int'
+          source_column: 'sid'
+        - column: 'mname'
+          dtype: 'int'
+          source_column: 'sname'
+        - column: checksum
+          dtype: str     # optional should be same as required by reconcillation strategy
+
+    reconciliation:
+      - name: full_sync
+        strategy: md5sum_hash
+        partition_column: created_at  #column used for partitioning in group by
+        partition_column_type: datetime
+        start: 'lambda: datetime.datetime(2020,2,1)'  # optional
+        end: 'lambda: datetime.datetime.now()'    # optional
+        initial_partition_interval: 1*365*24*60*60
+        partition_multiplier: 1  # optional default 1
+      - name: delta_sync
+        strategy: hash_md5_hash
+        partition_column: created_at  #column used for partitioning in group by
+        partition_column_type: datetime
+        start: 'lambda: datetime.datetime(2020,2,1)'  # optional
+        end: 'lambda: datetime.datetime.now()'    # optional
+        source_order_column: 'u.id'
+        initial_partition_interval: 1*365*24*60*60
+        partition_multiplier: 1 # optional default 1
+      - name: uuid_sync
+        strategy: hash_md5_hash
+        partition_column: id  #column used for partitioning in group by
+        partition_column_type: uuid
+        start: ''  # optional
+        end: ''    # optional
+        source_order_column: 'u.id'
+        initial_partition_interval: 1
+
+
+    enrichment:
+      - externalstore: redis1
+        name: redis1
+        type: redis
+        key_template: "user:{{ user_id }}"
+        output: 'lambda v: {redis_name":v}'
+      - externalstore: http1
+        name: http1
+        type: http
+        path: "TMPL(/creditscore?user_id={{user_id}})" # jinja template if preceeded by TMPL
+        params:
+          user_id: "{{ user_id }}"
+      - type: http
+        url: "TMPL(http:://myurl.com/creditscore?user_id={{user_id}})"
+
+    # transform:
+    #   user_id:
+    #     column: users.id
+    #   user_name:
+    #     column: users.name
+    #   order_total:
+    #     column: o.total
+    #     type: float
+    #   full_summary:
+    #     template: "{{ users.name }} - ${{ o.total }}"
+    #   created_at:
+    #     column: users.created_at
+  # # 2) Webhook Sink Example
+  # - name: notify_user_updates_via_webhook
+  #   source:
+  #     datastore: db1
+  #     main_table: users
+  #     dbschema: 'public'
+  #     filters:
+  #       - column: users.last_login
+  #         operator: '>'
+  #         value: '2025-04-01 00:00:00'
+  #   sink:
+  #     datastore: webhook1
+  #     url_path: '/myurlpath'
+
+  #   reconciliation:
+  #     method: hash_check
+  #     unique_key: user_id
+  #     sync_column: last_login
+  #     sync_column_type: datetime
+  #     since: 'last_updated_at'
+  #     merge_strategy: 
+  #       - name: upsert_delete
+  #   transform:
+  #     user_id:
+  #       column: users.id
+  #     email:
+  #       column: users.email
+  #     last_login:
+  #       column: users.last_login
+
+  # # 3) NATS Queue Sink Example
+  # - name: queue_user_updates_to_nats
+  #   source:
+  #     datastore: db1
+  #     main_table: users
+  #     dbschema: 'public'
+  #     filters:
+  #       - column: users.is_active
+  #         operator: "="
+  #         value: true
+  #   sink:
+  #     type: nats
+  #     datastore: nq1
+  #   reconciliation:
+  #     method: updated_at
+  #     unique_key: user_id
+  #     sync_column: updated_at
+  #     sync_column_type: datetime
+  #     from: '2025-04-01 00:00:00'
+  #   transform:
+  #     user_id:
+  #       column: users.id
+  #     status:
+  #       column: users.status
+  #     updated_at:
+  #       column: users.updated_at
+  #  # 4) nats source Example
+  # - name: ingest_filtered_user_events
+  #   source:
+  #     datastore: nats_source
+  #     subject: "user.events"
+  #     queue: "event_routing"
+  #     max_msgs: 200
+  #     per_msg_timeout: 2.0
+  #     total_timeout: 30.0
+  #     filters:
+  #       - column: "status"
+  #         operator: "=="
+  #         value: "active"
+  #       - column: "metadata.age"
+  #         operator: ">="
+  #         value: 21
+  #   sink:
+  #     type: database
+  #     datastore: db3
+  #     dbschema: "events_schema"
+  #     table: "user_events"
+  #   reconciliation:
+  #     method: updated_at
+  #     unique_key: event_id
+  #     sync_column: timestamp
+  #     sync_column_type: datetime
+  #     from: "2025-04-01 00:00:00"
+  #     till: "2025-04-24 00:00:00"
+  #     statedb:
+  #       datastore: db3
+  #       dbschema: "events_schema"
+  #       table: "user_events_state"
+  #       hash_column: hash_col
+  #   transform:
+  #     event_id:
+  #       column: event_id
+  #     user_id:
+  #       column: user_id
+  #     action:
+  #       column: action
+  #     timestamp:
+  #       column: timestamp

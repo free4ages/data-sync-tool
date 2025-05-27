@@ -1,0 +1,240 @@
+
+# This is a sample yaml configuration to sync data between two tables in different db while maintaining 
+# hash of row in a different db with fields provided by unique key and sync_column.
+# The process occurs in two steps
+#   - Bulk row diff check using group hash calculation of required columns in source and hash_column provided
+#     in state column of reconciliation step.Assume there is a function check_diff_blocks(config) which returns
+#     all the rows with difference
+#   - this step requires fetching individual rows and create/update/delte in the sink table
+#   Please provide a python code which handles multiple multiple type of source and sink database handling transformation logic
+#   It should be modular with possibilty of other source and sink(possible webhook/queue for sink) for other database in future as different database has different 
+#   query structure
+
+
+# Database peer connection configuration
+datastores:
+  - name: db1
+    type: postgres
+    host: localhost
+    port: 5432
+    username: postgres
+    password: postgres
+    database: postgresdb
+  - name: db2
+    type: mysql
+    host: localhost
+    port: 3306
+    username: mysql
+    password: mysql
+    database: mysqldb
+  - name: db3
+    type: clickhouse
+    host: localhost
+    port: 8236
+    username: clickhouse
+    password: clickhouse
+    database: clickhousedb
+
+pipelines:
+  - name: data_move_db1_users_to_db2_users  # pipeline for moving data from db1 users table to db2 users table with transaformation
+    source:
+      datastore: db1  # database peer name from datastores config
+      main_table: users  # table to get data from
+      schema: 'public'  # schema to pic table from. Might be empty in case of clickhouse
+      joins:
+        - table: orders
+          alias: o
+          type: left
+          on: "users.id = o.user_id"
+
+        - table: payments
+          alias: p
+          type: right
+          on: "users.id = p.user_id"
+      filters:
+        - "users.active = true"
+        - "p.status = 'success'"
+    sink:
+      type: database  # shoud support multiple sink including webhook, database and queue
+      datastore: db2
+      table: users
+      schema: 'myschema'
+      filters:
+        - "order_total > 10000"  # these will be used while querying the data for bulk/individual rows diff check
+    
+    reconciliation:
+      method: hash_check  # This method calculates diff of group of rows. Might support other method based on updated_at field in future
+        unique_key: user_id,user_name  #unique key in sync table. Can be single or multiple
+        hash_algo: md5  # This algo calculates the md5 of each row or group of rows
+        sync_column: created_at # This column will be used for syncing. It might be id, datetime or uuid(string) column which remains same once inserted. It should remain same in source and sink table
+        sync_column_type: datetime # can be int, string, datetime. Should 
+        from: '2020-01-01 00:00:00'  # start from which data has to be synced
+        till: '2024-01-01 00:00:00'  # Optional if not given use tomorrow date for datetime, a big number for int and largest uuid for uuid(string)
+        statedb:
+          datastore: db3
+          table: user_hash_table
+          schema: 'myschema2'
+          hash_column: hash_col  # name of the column in sink table which stores has value it will be int32 type
+
+    transform:
+      user_id:
+        column: "users.id"
+      user_name:
+        column: "users.name"
+      order_total:
+        column: "o.total"
+        type: float
+      full_summary:
+        template: "{{ users.name }} - ${{ o.total }}"
+      created_at:
+        column: "created_at"
+
+# Sample select query postgres
+# For diff checking 
+# Query to run on source table
+#  `select count(1) as count,sum(('x' || substr(md5(CONCAT(users.id|users.name|users.created_at)),1,8))::bit(32)::int)) as group_hash,
+#  to_char(created_at,'YYYY-MM-DD HH24:MI:SS') as timegroup from users 
+#  where created_at between '2020-01-01 00:00:00' and '2024-01-01 00:00:00' and users.active =true and  p.status = 'success'
+#  group by timegroup
+
+# Query to run on statedb
+#  `select count(1) as count,sum(hash_col)) as group_hash,
+#  to_char(created_at,'YYYY-MM-DD HH24:MI:SS') as timegroup from user_hash_table
+#  where created_at between '2020-01-01 00:00:00' and '2024-01-01 00:00:00' and users.active =true and  p.status = 'success'
+#  group by timegroup
+
+# Run above two query check the rows the fetch the diff blocks as follows and insert into sink after transformation
+# Query to Fetch from source table
+# select users.id, users.name, o.total from users left join orders
+
+# Then transformation will run for each data which will finally be inserted into sink table
+
+
+
+# Sample directory structure
+data_sync/
+├── adapters/
+│   ├── base.py          # Abstract base classes
+│   ├── postgres.py
+│   ├── mysql.py
+│   ├── clickhouse.py
+│   └── webhook.py       # Future sink
+├── engine/
+│   ├── pipeline.py      # Main pipeline runner
+│   ├── transform.py     # Jinja2 + type conversion
+│   ├── diff.py          # Reconciliation engine
+│   └── query_builder.py
+├── utils/
+│   ├── config_loader.py
+│   └── db_factory.py
+├── main.py
+└── config.yaml
+
+# Adapter Interface
+from abc import ABC, abstractmethod
+
+
+class Adapter(ABC):
+    def __init__(self, config: dict): self.config = config
+    @abstractmethod
+    def fetch_data(self, query): ...
+    @abstractmethod
+    def build_query(self, config): ...
+    @abstractmethod
+    def build_checksum_query(self, config): ...
+    @abstractmethod
+    def insert_data(self, row: dict): ...
+
+
+# transform function might be implemented like this
+import yaml
+import jinja2
+from glom import glom
+from typing import Any, Dict
+def render_template(template_str: str, context: dict) -> str:
+    template = jinja2.Template(template_str)
+    return template.render(context)
+
+def transform(input_data: dict, config: dict) -> dict:
+    output = {}
+    for key, rule in config.get("fields", {}).items():
+        if "template" in rule:
+            output[key] = render_template(rule["template"], input_data)
+        else:
+            value = glom(input_data, rule.get("from"), default=rule.get("default"))
+            if "type" in rule:
+                value = rule["type"](value)
+            output[key] = value
+    return output
+
+
+Help me build the reconcillation method for hash_check. The psedo code for md5 is as follows
+
+@dataclass
+class Chunk:
+  start : Datetime
+  end: Datetime
+  level: int
+  num_rows: int
+  hash: string
+
+def build_has_query(start, end, level, config, for):
+  if for=='source':
+    query = Query(
+      select=List[Field]  # use hash_column provided in sourcestate hash_column else hash field by list of select fields
+      ...
+      filter     # filter by start and end along with other filters in source
+      group_by=  # depends on level 1=Yearly 2 Monthly 3 Daily 4 Hourly 5 Minute 6 Second
+    )
+  elif for=='source':
+    query = Query(
+      select=List[Field]  # use hash_column provided in sinestate hash_column
+      ...
+      filter     # filter by start and end along with other filters in sink
+      group_by=  # depends on level 1=Yearly 2 Monthly 3 Daily 4 Hourly 5 Minute 6 Second
+    )
+
+def calculate_chunk_status(source_chunks, sink_chunks)-> List[Chunk], List[Enum('N','M', 'A','D')]:
+  status = []
+  for chunk in set(source_chunks, sink_chunks): # treat (start,end) as common key
+    if num_rows and hash of source_chunk and sink_chunk matches. Its not changed (status N)
+    elif num_rows and hash of source_chunk and sink_chunk matches, Its modified and need to add in sink (status M)
+    elif chunk not in sink_chunks. Its added and needs to sync (status A)
+    elif chunk not in source_chunks. Its deleted and need to delete from sink(status D)
+  return set(source_chunks, sink_chunks), status
+
+
+def calculate_chunks(
+  ss: Adapter, # sourcestate
+  ts : Adapter, # sinkstate
+  start: Datetime, # start_date
+  end: Datetime, #end date,
+  level: int, 
+  config: dict
+  max_chunk_size: int # if count of rows in chunk is greater than the max_chunk_size need further drill down 
+) -> List[Chunk], List[Enum('N','M', 'A','D')]:
+  chunks = []
+  src_query = build_hash_query(start, end, level, config, for="source")
+  sink_query = build_hash_query(start, end, level, config, for="sink")
+  source_chunks = get_chunks(ss)
+  sink_chunks = get_chunks(ts)
+  chunks, status = calculate_chunk_status(source_chunks, sink_chunks)
+  for chunk in chunks:
+    if status in ('M','A'):
+      if chunk.num_rows> max_chunk_size:
+        chunks,status += calculate_chunks(ss,ts,chunk.start, chunk.end, chunk.level+1, config, max_chunk_size)
+      else:
+        chunks.append(chunk)
+        status.append(status[chunk])
+    else:
+        chunks.append(chunk)
+        status.append(status[chunk])
+  return chunks,status
+
+
+
+  
+      
+
+    
+

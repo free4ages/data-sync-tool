@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: synctool-postgres
+    environment:
+      POSTGRES_USER: synctool
+      POSTGRES_PASSWORD: synctool
+      POSTGRES_DB: synctool
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./test/engine/reconcile/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  postgres_data:
