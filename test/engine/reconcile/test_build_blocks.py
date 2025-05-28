@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 from engine.reconcile import build_blocks, Block, calculate_blocks
-from core.config import HASH_MD5_HASH, MD5_SUM_HASH, ReconciliationConfig
+from core.config import HASH_MD5_HASH, MD5_SUM_HASH, FieldConfig, ReconciliationConfig
 from adapters.base import Adapter
 
 
@@ -13,7 +13,11 @@ class TestBuildBlocks:
     def mock_source_adapter(self):
         adapter = MagicMock(spec=Adapter)
         adapter.adapter_config = MagicMock(
-            fields=["id", "name", "value"],
+            fields=[
+                FieldConfig(column="id"), 
+                FieldConfig(column="name"), 
+                FieldConfig(column="value")
+            ],
             table=MagicMock(table="source_table", dbschema="public", alias="src"),
             filters=[],
             joins=[]
@@ -24,7 +28,11 @@ class TestBuildBlocks:
     def mock_sink_adapter(self):
         adapter = MagicMock(spec=Adapter)
         adapter.adapter_config = MagicMock(
-            fields=["id", "name", "value"],
+            fields=[
+                FieldConfig(column="id"), 
+                FieldConfig(column="name"), 
+                FieldConfig(column="value")
+            ],
             table=MagicMock(table="sink_table", dbschema="public", alias="snk"),
             filters=[],
             joins=[]
@@ -41,14 +49,13 @@ class TestBuildBlocks:
             partition_column="id",
             order_column="id"
         )
-        config.source_state_pfield = MagicMock(
-            partition_column="id"
-        )
+        config.source_state_pfield = config.source_pfield
         config.sink_pfield = MagicMock(
             hash_column="hash_col",
             partition_column="id",
             order_column="id"
         )
+        config.sink_state_pfield = config.sink_pfield
         config.filters = []
         config.joins = []
         return config
@@ -110,7 +117,7 @@ class TestBuildBlocks:
         intervals = [100, 10, 1]
         
         blocks, statuses = build_blocks(
-            mock_source_adapter, mock_sink_adapter, 1, 99, mock_reconciliation_config,
+            mock_source_adapter, mock_sink_adapter, 1, 100, mock_reconciliation_config,
             max_block_size=1000,
             intervals=intervals
         )
@@ -165,9 +172,9 @@ class TestBuildBlocks:
         mock_source_adapter.fetch.return_value = source_data
         mock_sink_adapter.fetch.return_value = sink_data
         
-        start = 13
-        end = 57
-        intervals = [50, 10, 3, 1]
+        start = 1
+        end = 400
+        intervals = [500, 10, 3, 1]
         
         blocks, statuses = build_blocks(
             mock_source_adapter, mock_sink_adapter, start, end, mock_reconciliation_config,
@@ -205,8 +212,8 @@ class TestBuildBlocks:
         mock_reconciliation_config.sink_pfield.partition_column = "created_at"
         mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
         
-        start = datetime(2023, 1, 1)
-        end = datetime(2023, 1, 4)
+        start = datetime(2023, 1, 2)
+        end = datetime(2023, 1, 5)
         
         # Set sink_max_block_size to allow merging all blocks
         blocks, statuses = build_blocks(
@@ -486,8 +493,8 @@ class TestBuildBlocks:
         mock_reconciliation_config.sink_pfield.partition_column = "created_at"
         mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
         
-        start = datetime(2023, 1, 1)
-        end = datetime(2023, 1, 5)
+        start = datetime(2023, 1, 3)
+        end = datetime(2023, 1, 7)
         
         # Set max_block_size high enough to merge blocks
         blocks, statuses = build_blocks(
