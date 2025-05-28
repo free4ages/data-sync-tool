@@ -44,7 +44,7 @@ class PostgresAdapter(Adapter):
                     expr = f"FLOOR(EXTRACT(EPOCH FROM {partition_column}) / {fct})"
                 else:
                     prev = intervals[idx-1]
-                    expr = f"FLOOR((EXTRACT(EPOCH FROM {partition_column}) % {prev}) / {fct})"
+                    expr = f"FLOOR(((EXTRACT(EPOCH FROM {partition_column})::bigint) %% {prev}) / {fct})"
                     
                 segments.append(f"{expr}::text")
             return " || '-' || ".join(segments)
@@ -100,7 +100,7 @@ class PostgresAdapter(Adapter):
                 expr = f"sum({metadata.hash_column}::bigint)"
             else:
                 concat = ",".join([f"{x.expr}" for x in metadata.fields])
-                expr = f"sum((('x'||substr(md5({concat}),1,8))::bit(32)::int)::numeric)"
+                expr = f"sum((('x'||substr(md5(CONCAT({concat})),1,8))::bit(32)::int)::numeric)"
         elif metadata.strategy == HASH_MD5_HASH:
             if metadata.hash_column:
                 expr = f"md5(string_agg({metadata.hash_column},',' order by {metadata.order_column}))"
@@ -135,6 +135,8 @@ class PostgresAdapter(Adapter):
     def fetch(self, query: Query, op_name: str="") -> list:
         # import pdb;pdb.set_trace()
         sql, params = self._build_sql(query)
+        # import pdb;pdb.set_trace()
+        # print(sql,params)
         self.cursor.execute(sql, params)
         cols = [d[0] for d in self.cursor.description]
         return [dict(zip(cols, row)) for row in self.cursor.fetchall()]

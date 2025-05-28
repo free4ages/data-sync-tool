@@ -178,7 +178,7 @@ class SourceConfig(DynamicModel):
         sink = ctx.get('sink')
         if sink and sink.fields:
             for fld in sink.fields:
-                scol = fld.source_column
+                scol = fld.source_column or fld.column
                 if isinstance(scol, str) and not fld.source:
                     scol = generate_alias(scol)
                     if scol not in field_map:

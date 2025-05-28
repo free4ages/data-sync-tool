@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import Mock, patch
 
-from core.config import MD5_SUM_HASH, ReconciliationConfig
+from core.config import MD5_SUM_HASH, FieldConfig, ReconciliationConfig
 from engine.reconcile import calculate_blocks, Block, to_blocks
 from adapters.base import Adapter
 
@@ -10,7 +10,11 @@ from adapters.base import Adapter
 def mock_source_adapter():
     adapter = Mock(spec=Adapter)
     adapter.adapter_config = Mock(
-        fields=["id", "name", "value"],
+        fields=[
+            FieldConfig(column="id"), 
+            FieldConfig(column="name"), 
+            FieldConfig(column="value")
+        ],
         table=Mock(table="source_table", dbschema="public", alias="src"),
         filters=[],
         joins=[]
@@ -21,7 +25,11 @@ def mock_source_adapter():
 def mock_sink_adapter():
     adapter = Mock(spec=Adapter)
     adapter.adapter_config = Mock(
-        fields=["id", "name", "value"],
+        fields=[
+            FieldConfig(column="id"), 
+            FieldConfig(column="name"), 
+            FieldConfig(column="value")
+        ],
         table=Mock(table="sink_table", dbschema="public", alias="snk"),
         filters=[],
         joins=[]
@@ -33,16 +41,18 @@ def mock_reconciliation_config():
     config = Mock(spec=ReconciliationConfig)
     config.partition_column_type = "int"
     config.strategy = MD5_SUM_HASH
-    config.source_pfield = Mock(
+    config.source_state_pfield = Mock(
         hash_column="hash_col",
         partition_column="id",
         order_column="id"
     )
-    config.sink_pfield = Mock(
+    config.sink_state_pfield = Mock(
         hash_column="hash_col",
         partition_column="id",
         order_column="id"
     )
+    config.source_pfield = config.source_state_pfield
+    config.sink_pfield = config.sink_state_pfield
     config.filters = []
     config.joins = []
     return config

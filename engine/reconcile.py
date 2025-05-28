@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, date
+from datetime import UTC, datetime, date, timedelta
 import math
 from typing import List, Literal, Tuple, Dict, Union
 from adapters.base import Adapter
@@ -62,22 +62,35 @@ def build_data_range_query(r_config: ReconciliationConfig, src_config: Union[Sou
     )
 
 def partition_generator(start, end, initial_partition_interval, partition_column_type):
+    # import pdb;pdb.set_trace()
     # considers [start,end] as inclusive
     if partition_column_type == "datetime":
         initial_partition_interval = int(initial_partition_interval or 365*24*60*60)
         start_timestamp = math.floor(start.timestamp())
         end_timestamp = math.ceil(end.timestamp())
-        for x in range(start_timestamp, end_timestamp+1, initial_partition_interval):
-            # convert back to datetime
-            s1 = datetime.fromtimestamp(x, start.tzinfo)
-            e1 = datetime.fromtimestamp(min(x+initial_partition_interval-1, end_timestamp), end.tzinfo)
+        cur = start_timestamp
+        while cur<end_timestamp:
+            cur1 = ((cur+initial_partition_interval)//initial_partition_interval)*initial_partition_interval
+            s1 = datetime.fromtimestamp(cur, start.tzinfo)
+            e1 = datetime.fromtimestamp(min(cur1, end_timestamp), end.tzinfo)
             yield (s1, e1)
+            cur = cur1
+        # for x in range(start_timestamp, end_timestamp+1, initial_partition_interval):
+        #     # convert back to datetime
+        #     s1 = datetime.fromtimestamp(x, start.tzinfo)
+        #     e1 = datetime.fromtimestamp(min(x+initial_partition_interval-1, end_timestamp), end.tzinfo)
+        #     yield (s1, e1)
     elif partition_column_type == "int":
         initial_partition_interval = initial_partition_interval or 200000
-        for x in range(start, end+1, initial_partition_interval):
-            s1 = x
-            e1 = min(x+initial_partition_interval-1, end)
-            yield (s1, e1)
+        cur = start
+        while cur<end:
+            cur1 = ((cur+initial_partition_interval)//initial_partition_interval)*initial_partition_interval
+            yield(cur, min(cur1, end))
+            cur= cur1
+        # for x in range(start, end+1, initial_partition_interval):
+        #     s1 = x
+        #     e1 = min(x+initial_partition_interval-1, end)
+        #     yield (s1, e1)
 
 def get_data_range(
         sourcestate: Adapter,
@@ -97,14 +110,20 @@ def get_data_range(
         if r_config.strategy in (MD5_SUM_HASH, HASH_MD5_HASH):
             query = build_data_range_query(r_config, sourcestate.adapter_config)
             result = sourcestate.fetch_one(query, op_name="range_search")
-            sstart = result["start"]
-            send = result["end"]
+            sstart = result["start"] if result else None
+            send = result["end"] if result else None
 
             query = build_data_range_query(r_config, sinkstate.adapter_config)
             result = sinkstate.fetch_one(query, op_name="range_search")
-            if result:
-                sstart = min(sstart, result["start"])
-                send = max(send, result["end"])
+            skstart = result["start"] if result else None
+            skend = result["end"] if result else None
+
+            sstart = min(sstart,skstart) if (sstart and skstart) else (sstart or skstart)
+            send = max(send,skend) if (send and skend) else (send or skend)
+
+            if send:
+                # add buffer of 1 for exclusive range
+                send = send+timedelta(seconds=1) if r_config.partition_column_type == "datetime" else send+1
     
     sstart = max(user_start, sstart) if user_start else sstart
     send = min(user_end, send) if user_end else send
@@ -130,15 +149,16 @@ def build_block_hash_query(
     r_config: ReconciliationConfig,
     target: Literal["source", "sink"]
 ) -> Query:
+    # import pdb;pdb.set_trace()
     partition_column_type = r_config.partition_column_type
     if target=="source":
-        hash_column = r_config.source_pfield.hash_column
-        partition_column = r_config.source_pfield.partition_column
-        order_column = r_config.source_pfield.order_column
+        hash_column = r_config.source_state_pfield.hash_column
+        partition_column = r_config.source_state_pfield.partition_column
+        order_column = r_config.source_state_pfield.order_column
     else:
-        hash_column = r_config.sink_pfield.hash_column
-        partition_column = r_config.sink_pfield.partition_column
-        order_column = r_config.sink_pfield.order_column
+        hash_column = r_config.sink_state_pfield.hash_column
+        partition_column = r_config.sink_state_pfield.partition_column
+        order_column = r_config.sink_state_pfield.order_column
     block_hash_field = Field(
         expr=f"{partition_column}", 
         alias="blockhash", 
@@ -147,7 +167,7 @@ def build_block_hash_query(
             partition_column = partition_column,
             hash_column = hash_column,
             strategy = r_config.strategy,
-            fields = config.fields,
+            fields = [Field(expr=x.column) for x in config.fields],
             partition_column_type=partition_column_type
         ), 
         type="blockhash"
@@ -172,17 +192,17 @@ def build_block_hash_query(
     if partition_column_type=="datetime":
         filters += [
              Filter(column=partition_column, operator='>=', value=start.strftime("%Y-%m-%d %H:%M:%S")), 
-             Filter(column=partition_column, operator='<=', value=end.strftime("%Y-%m-%d %H:%M:%S"))
+             Filter(column=partition_column, operator='<', value=end.strftime("%Y-%m-%d %H:%M:%S"))
         ]
     elif partition_column_type == "int":
         filters += [
              Filter(column=partition_column, operator='>=', value=start), 
-             Filter(column=partition_column, operator='<=', value=end)
+             Filter(column=partition_column, operator='<', value=end)
         ]
     elif partition_column_type == "str":
         filters += [
              Filter(column=partition_column, operator='>=', value=start), 
-             Filter(column=partition_column, operator='<=', value=end)
+             Filter(column=partition_column, operator='<', value=end)
         ]
     filters += build_filters_from_config(config)
     query = Query(
@@ -249,6 +269,9 @@ def calculate_block_status(src_blocks: List[Block], snk_blocks: List[Block]) -> 
     for key in sorted(all_keys):
         sc = src_map.get(key)
         kc = snk_map.get(key)
+        sel = sc or kc
+        if sc and kc:
+            sel = sc if sc.num_rows> kc.num_rows else kc
         if sc and kc and sc.num_rows == kc.num_rows and sc.hash == kc.hash:
             status[key] = 'N'
         elif sc and kc:
@@ -257,7 +280,7 @@ def calculate_block_status(src_blocks: List[Block], snk_blocks: List[Block]) -> 
             status[key] = 'A'
         else:
             status[key] = 'D'
-        result.append(sc or kc)
+        result.append(sel)
 
     return result, status           
 
@@ -294,7 +317,7 @@ def calculate_blocks(
         start, 
         end, 
         level,
-        intervals, 
+        intervals,
         sourcestate.adapter_config,
         r_config,
         "source"

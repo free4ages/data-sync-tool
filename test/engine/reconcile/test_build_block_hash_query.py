@@ -67,7 +67,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "2023-01-01 00:00:00")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "2023-01-02 00:00:00")
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -102,7 +102,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "2023-01-01 00:00:00")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "2023-01-02 00:00:00")
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -138,7 +138,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, 13)
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, 57)
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -174,7 +174,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, 13)
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, 57)
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -210,7 +210,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "A")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "Z")
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -246,7 +246,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "A")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "Z")
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -282,7 +282,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "2023-01-01 00:00:00")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "2023-01-02 00:00:00")
         self.assertEqual(query.group_by[0].expr, "blockname")
 
@@ -318,7 +318,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         self.assertEqual(query.filters[0].operator, ">=")
         self.assertEqual(query.filters[0].value, "2023-01-01 00:00:00")
         self.assertEqual(query.filters[1].column, "partition_column")
-        self.assertEqual(query.filters[1].operator, "<=")
+        self.assertEqual(query.filters[1].operator, "<")
         self.assertEqual(query.filters[1].value, "2023-01-02 00:00:00")
         self.assertEqual(query.group_by[0].expr, "blockname")
 

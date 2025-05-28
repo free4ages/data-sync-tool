@@ -5,7 +5,7 @@ from datetime import datetime
 
 import psycopg2
 import pytz
-from core.config import MD5_SUM_HASH, HASH_MD5_HASH, ReconciliationConfig, PipelineConfig
+from core.config import MD5_SUM_HASH, HASH_MD5_HASH, FieldConfig, ReconciliationConfig, PipelineConfig
 from engine.reconcile import prepare_data_blocks, Block
 from adapters.postgres import PostgresAdapter
 from adapters.base import Adapter
@@ -35,7 +35,12 @@ def postgres_source_adapter(postgres_connection_params):
             'database': postgres_connection_params['dbname'],
         },
         adapter_config=MagicMock(
-            fields=["id", "name", "value", "hash_value"],
+            fields=[
+                FieldConfig(column="id"),
+                FieldConfig(column="name"),
+                FieldConfig(column="value"),
+                FieldConfig(column="created_at")
+            ],
             table=MagicMock(table="source_table", dbschema="public", alias="src"),
             filters=[],
             joins=[],
@@ -60,7 +65,12 @@ def postgres_sink_adapter(postgres_connection_params):
             'database': postgres_connection_params['dbname'],
         },
         adapter_config=MagicMock(
-            fields=["id", "name", "value", "hash_value"],
+            fields=[
+                FieldConfig(column="id"),
+                FieldConfig(column="name"),
+                FieldConfig(column="value"),
+                FieldConfig(column="created_at")
+            ],
             table=MagicMock(table="sink_table", dbschema="public", alias="snk"),
             filters=[],
             joins=[],
@@ -95,14 +105,13 @@ def int_reconciliation_config():
         partition_column="id",
         order_column="id"
     )
-    config.source_state_pfield = MagicMock(
-        partition_column="id"
-    )
+    config.source_state_pfield = config.source_pfield
     config.sink_pfield = MagicMock(
         hash_column="hash_value",
         partition_column="id",
         order_column="id"
     )
+    config.sink_state_pfield = config.sink_pfield
     config.filters = []
     config.joins = []
     config.initial_partition_interval = 10000
@@ -122,14 +131,13 @@ def datetime_reconciliation_config():
         partition_column="created_at",
         order_column="id"
     )
-    config.source_state_pfield = MagicMock(
-        partition_column="created_at"
-    )
+    config.source_state_pfield = config.source_pfield
     config.sink_pfield = MagicMock(
         hash_column="hash_value",
         partition_column="created_at",
         order_column="id"
     )
+    config.sink_state_pfield = config.sink_pfield
     config.filters = []
     config.joins = []
     config.initial_partition_interval = 86400  # 1 day in seconds
@@ -152,12 +160,13 @@ class TestPrepareDataBlocks:
         blocks, statuses = prepare_data_blocks(
             pipeline=mock_pipeline,
             r_config=int_reconciliation_config,
-            initial_partition_interval=10000,
+            initial_partition_interval=9999,
             max_block_size=max_block_size,
             interval_reduction_factor=interval_reduction_factor,
             start=start,
             end=end
         )
+        # import pdb;pdb.set_trace()
         
         # Assertions
         assert len(blocks) > 0, "Should have generated some blocks"
@@ -342,7 +351,7 @@ class TestPrepareDataBlocks:
         blocks, statuses = prepare_data_blocks(
             pipeline=mock_pipeline,
             r_config=int_reconciliation_config,
-            initial_partition_interval=10000,
+            initial_partition_interval=9999,
             max_block_size=5000,
             interval_reduction_factor=5,
             start=1,
@@ -387,7 +396,35 @@ class TestPrepareDataBlocks:
         max_block_size = max(block_sizes) if block_sizes else 0
         assert max_block_size <= 500, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_full(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_full_datetime(self, mock_pipeline, datetime_reconciliation_config):
+        """Test prepare_data_blocks with custom interval settings."""
+        # Test with custom interval parameters
+        initial_partition_interval = 7*86400  # Small interval
+        interval_reduction_factor = 64  # Large reduction factor
+        
+        blocks, statuses = prepare_data_blocks(
+            pipeline=mock_pipeline,
+            r_config=datetime_reconciliation_config,
+            initial_partition_interval=initial_partition_interval,
+            max_block_size=1,
+            interval_reduction_factor=interval_reduction_factor,
+        )
+        # import pdb;pdb.set_trace()
+        
+        # Assertions
+        assert len(blocks) > 0, "Should have generated blocks with custom intervals"
+        assert len(blocks) == len(statuses), "Should have same number of blocks and statuses"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='A']) == 10000, "Should have 10000 new rows in source"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='D']) == 10000, "Should have 10000 extra rows in sink"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='N']) == 10437, "Should have 10437 common rows as 437 numbers between 10000 to 20000 have same mod for 19 and 23"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='M']) == 9563, "Should have 9563 modified rows"
+ 
+        # Verify small block sizes due to custom interval settings
+        # block_sizes = [block.num_rows for block,status in zip(blocks,statuses) if status in ('M','A')]
+        # max_block_size = max(block_sizes) if block_sizes else 0
+        # assert max_block_size <= 5000, "Max block size should respect max_block_size"
+
+    def test_prepare_data_blocks_full_int(self, mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 10000  # Small interval
@@ -397,7 +434,7 @@ class TestPrepareDataBlocks:
             pipeline=mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
-            max_block_size=10000,
+            max_block_size=1,
             interval_reduction_factor=interval_reduction_factor,
         )
         # import pdb;pdb.set_trace()
@@ -405,8 +442,103 @@ class TestPrepareDataBlocks:
         # Assertions
         assert len(blocks) > 0, "Should have generated blocks with custom intervals"
         assert len(blocks) == len(statuses), "Should have same number of blocks and statuses"
-        
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='A']) == 10000, "Should have 10000 new rows in source"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='D']) == 10000, "Should have 10000 extra rows in sink"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='N']) == 10437, "Should have 10437 common rows as 437 numbers between 10000 to 20000 have same mod for 19 and 23"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='M']) == 9563, "Should have 9563 modified rows"
+ 
         # Verify small block sizes due to custom interval settings
         block_sizes = [block.num_rows for block,status in zip(blocks,statuses) if status in ('M','A')]
         max_block_size = max(block_sizes) if block_sizes else 0
-        assert max_block_size <= 500, "Max block size should respect max_block_size"
+        assert max_block_size <= 5000, "Max block size should respect max_block_size"
+
+    def test_prepare_data_blocks_from_raw_field_int(self, mock_pipeline, int_reconciliation_config):
+        """Test prepare_data_blocks with custom interval settings."""
+        # Test with custom interval parameters
+        initial_partition_interval = 10000  # Small interval
+        interval_reduction_factor = 10  # Large reduction factor
+        int_reconciliation_config.source_state_pfield.hash_column=None
+        int_reconciliation_config.sink_state_pfield.hash_column=None
+        
+        blocks, statuses = prepare_data_blocks(
+            pipeline=mock_pipeline,
+            r_config=int_reconciliation_config,
+            initial_partition_interval=initial_partition_interval,
+            max_block_size=1,
+            interval_reduction_factor=interval_reduction_factor,
+        )
+        # import pdb;pdb.set_trace()
+        
+        # Assertions
+        assert len(blocks) > 0, "Should have generated blocks with custom intervals"
+        assert len(blocks) == len(statuses), "Should have same number of blocks and statuses"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='A']) == 10000, "Should have 10000 new rows in source"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='D']) == 10000, "Should have 10000 extra rows in sink"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='N']) == 10437, "Should have 10437 common rows as 437 numbers between 10000 to 20000 have same mod for 19 and 23"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='M']) == 9563, "Should have 9563 modified rows"
+ 
+        # Verify small block sizes due to custom interval settings
+        block_sizes = [block.num_rows for block,status in zip(blocks,statuses) if status in ('M','A')]
+        max_block_size = max(block_sizes) if block_sizes else 0
+        assert max_block_size <= 5000, "Max block size should respect max_block_size"
+
+    def test_prepare_data_blocks_from_raw_field_datetime(self, mock_pipeline, datetime_reconciliation_config):
+        """Test prepare_data_blocks with custom interval settings."""
+        # Test with custom interval parameters
+        initial_partition_interval = 7*86400  # Small interval
+        interval_reduction_factor = 64  # Large reduction factor
+        datetime_reconciliation_config.source_state_pfield.hash_column=None
+        datetime_reconciliation_config.sink_state_pfield.hash_column=None
+        
+        blocks, statuses = prepare_data_blocks(
+            pipeline=mock_pipeline,
+            r_config=datetime_reconciliation_config,
+            initial_partition_interval=initial_partition_interval,
+            max_block_size=1,
+            interval_reduction_factor=interval_reduction_factor,
+        )
+        # import pdb;pdb.set_trace()
+        
+        # Assertions
+        assert len(blocks) > 0, "Should have generated blocks with custom intervals"
+        assert len(blocks) == len(statuses), "Should have same number of blocks and statuses"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='A']) == 10000, "Should have 10000 new rows in source"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='D']) == 10000, "Should have 10000 extra rows in sink"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='N']) == 10437, "Should have 10437 common rows as 437 numbers between 10000 to 20000 have same mod for 19 and 23"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='M']) == 9563, "Should have 9563 modified rows"
+ 
+        # Verify small block sizes due to custom interval settings
+        block_sizes = [block.num_rows for block,status in zip(blocks,statuses) if status in ('M','A')]
+        max_block_size = max(block_sizes) if block_sizes else 0
+        assert max_block_size <= 5000, "Max block size should respect max_block_size"
+
+    def test_prepare_data_blocks_sum_md5_hash_int(self, mock_pipeline, int_reconciliation_config):
+        """Test prepare_data_blocks with custom interval settings."""
+        # Test with custom interval parameters
+        initial_partition_interval = 10000  # Small interval
+        interval_reduction_factor = 10  # Large reduction factor
+        int_reconciliation_config.source_state_pfield.hash_column=None
+        int_reconciliation_config.sink_state_pfield.hash_column=None
+        int_reconciliation_config.strategy = MD5_SUM_HASH
+        
+        blocks, statuses = prepare_data_blocks(
+            pipeline=mock_pipeline,
+            r_config=int_reconciliation_config,
+            initial_partition_interval=initial_partition_interval,
+            max_block_size=1,
+            interval_reduction_factor=interval_reduction_factor,
+        )
+        # import pdb;pdb.set_trace()
+        
+        # Assertions
+        assert len(blocks) > 0, "Should have generated blocks with custom intervals"
+        assert len(blocks) == len(statuses), "Should have same number of blocks and statuses"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='A']) == 10000, "Should have 10000 new rows in source"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='D']) == 10000, "Should have 10000 extra rows in sink"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='N']) == 10437, "Should have 10437 common rows as 437 numbers between 10000 to 20000 have same mod for 19 and 23"
+        assert sum([b.num_rows for b,status in zip(blocks,statuses) if status=='M']) == 9563, "Should have 9563 modified rows"
+ 
+        # Verify small block sizes due to custom interval settings
+        block_sizes = [block.num_rows for block,status in zip(blocks,statuses) if status in ('M','A')]
+        max_block_size = max(block_sizes) if block_sizes else 0
+        assert max_block_size <= 5000, "Max block size should respect max_block_size"

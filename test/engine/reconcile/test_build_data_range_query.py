@@ -87,7 +87,7 @@ class TestBuildDataRangeQuery(unittest.TestCase):
             batch_size=100,
             table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias")
         )
-        query = build_data_range_query(self.r_config, src_config, sink_config)
+        query = build_data_range_query(self.r_config, src_config)
         self.assertEqual(query.select, [
             Field(expr="min(timestamp)", alias='start', type='column'),
             Field(expr="max(timestamp)", alias='end', type='column')

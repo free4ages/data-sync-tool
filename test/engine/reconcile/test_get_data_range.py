@@ -30,17 +30,26 @@ class TestGetDataRange(unittest.TestCase):
     def test_basic_functionality(self):
         self.source_state.fetch_one.return_value = {
             "start": datetime(2023, 1, 1, 0, 0, 0),
-            "end": datetime(2023, 1, 31, 23, 59, 59)
+            "end": datetime(2023, 1, 1, 22,0,0)
+        }
+        self.sink_state.fetch_one.return_value = {
+            "start": None,
+            "end": None
         }
 
         start, end = get_data_range(self.source_state, self.sink_state, self.r_config)
 
         self.assertEqual(start, datetime(2023, 1, 1, 0, 0, 0))
-        self.assertEqual(end, datetime(2023, 1, 31, 23, 59, 59))
+        self.assertEqual(end, datetime(2023, 1, 1, 22, 0, 1))
         self.source_state.fetch_one.assert_called_once()
+        self.sink_state.fetch_one.assert_called_once()
 
     def test_edge_case_empty_state(self):
         self.source_state.fetch_one.return_value = {
+            "start": None,
+            "end": None
+        }
+        self.sink_state.fetch_one.return_value = {
             "start": None,
             "end": None
         }
@@ -72,16 +81,24 @@ class TestGetDataRange(unittest.TestCase):
             "start": datetime(2023, 1, 1, 0, 0, 0),
             "end": datetime(2023, 1, 31, 23, 59, 59)
         }
+        self.sink_state.fetch_one.return_value = {
+            "start": datetime(2023, 1, 1, 0, 0, 0),
+            "end": datetime(2023, 1, 31, 23, 59, 59)
+        }
 
         start, end = get_data_range(self.source_state, self.sink_state, self.r_config)
 
         self.assertEqual(start, datetime(2023, 1, 15, 0, 0, 0))
-        self.assertEqual(end, datetime(2023, 1, 31, 23, 59, 59))
+        self.assertEqual(end, datetime(2023, 2, 1, 0,0,0))
         self.source_state.fetch_one.assert_called_once()
 
     def test_user_provided_end_only(self):
         self.r_config.end = datetime(2023, 1, 16, 0, 0, 0)
         self.source_state.fetch_one.return_value = {
+            "start": datetime(2023, 1, 1, 0, 0, 0),
+            "end": datetime(2023, 1, 31, 23, 59, 59)
+        }
+        self.sink_state.fetch_one.return_value = {
             "start": datetime(2023, 1, 1, 0, 0, 0),
             "end": datetime(2023, 1, 31, 23, 59, 59)
         }
