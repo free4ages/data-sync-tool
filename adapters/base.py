@@ -14,10 +14,10 @@ class Adapter(ABC):
         pass
 
     @abstractmethod
-    def fetch(self, query: Query, name: str) -> List[Dict]: ...
+    def fetch(self, query: Query, op_name: str) -> List[Dict]: ...
 
     @abstractmethod
-    def fetch_one(self, query: Query, name: str) -> Dict: ...
+    def fetch_one(self, query: Query, op_name: str) -> Dict: ...
 
     @abstractmethod
     def execute(self, sql: str, params=None): ...
@@ -27,6 +27,9 @@ class Adapter(ABC):
 
     @abstractmethod
     def close(self): ...
+
+    def __eq__(self, value: 'Adapter') -> bool:
+        return self.adapter_config == value.adapter_config
 
 
 class ExternalAdapter(ABC):

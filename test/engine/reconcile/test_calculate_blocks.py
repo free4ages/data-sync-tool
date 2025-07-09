@@ -41,18 +41,18 @@ def mock_reconciliation_config():
     config = Mock(spec=ReconciliationConfig)
     config.partition_column_type = "int"
     config.strategy = MD5_SUM_HASH
-    config.source_state_pfield = Mock(
+    config.source_state_meta_columns = Mock(
         hash_column="hash_col",
         partition_column="id",
         order_column="id"
     )
-    config.sink_state_pfield = Mock(
+    config.sink_state_meta_columns = Mock(
         hash_column="hash_col",
         partition_column="id",
         order_column="id"
     )
-    config.source_pfield = config.source_state_pfield
-    config.sink_pfield = config.sink_state_pfield
+    config.source_meta_columns = config.source_state_meta_columns
+    config.sink_meta_columns = config.sink_state_meta_columns
     config.filters = []
     config.joins = []
     return config
@@ -596,8 +596,8 @@ def test_calculate_blocks_partition_column_int(mock_source_adapter, mock_sink_ad
     
     # Update mock reconciliation config for int partition column
     mock_reconciliation_config.partition_column_type = "int"
-    mock_reconciliation_config.source_pfield.partition_column = "id"
-    mock_reconciliation_config.sink_pfield.partition_column = "id"
+    mock_reconciliation_config.source_meta_columns.partition_column = "id"
+    mock_reconciliation_config.sink_meta_columns.partition_column = "id"
     
     # Execute function
     blocks, statuses = calculate_blocks(
@@ -642,8 +642,8 @@ def xtest_calculate_blocks_partition_column_str(mock_source_adapter, mock_sink_a
     
     # Update mock reconciliation config for str partition column
     mock_reconciliation_config.partition_column_type = "str"
-    mock_reconciliation_config.source_pfield.partition_column = "name"
-    mock_reconciliation_config.sink_pfield.partition_column = "name"
+    mock_reconciliation_config.source_meta_columns.partition_column = "name"
+    mock_reconciliation_config.sink_meta_columns.partition_column = "name"
     
     # Execute function
     blocks, statuses = calculate_blocks(

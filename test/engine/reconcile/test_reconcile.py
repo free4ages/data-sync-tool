@@ -8,7 +8,7 @@
 # from adapters.base import Adapter
 # from core.config import (
 #     HASH_MD5_HASH, MD5_SUM_HASH, 
-#     PartitionFieldConfig, ReconciliationConfig, 
+#     StoreMeta, ReconciliationConfig, 
 #     SourceConfig, SinkConfig, StateConfig, 
 #     FieldConfig, TableConfig
 # )
@@ -322,22 +322,22 @@
 #             strategy=MD5_SUM_HASH,
 #             partition_column_type="int",
 #             initial_partition_interval=100,
-#             source_pfield=PartitionFieldConfig(
+#             source_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column="data",
 #                 order_column="id"
 #             ),
-#             sink_pfield=PartitionFieldConfig(
+#             sink_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column="data",
 #                 order_column="id"
 #             ),
-#             source_state_pfield=PartitionFieldConfig(
+#             source_state_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column="data",
 #                 order_column="id"
 #             ),
-#             sink_state_pfield=PartitionFieldConfig(
+#             sink_state_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column="data",
 #                 order_column="id"
@@ -463,22 +463,22 @@
 #             strategy=MD5_SUM_HASH,
 #             partition_column_type="datetime",
 #             initial_partition_interval=86400,  # 1 day in seconds
-#             source_pfield=PartitionFieldConfig(
+#             source_meta_columns=StoreMeta(
 #                 partition_column="timestamp",
 #                 hash_column="data",
 #                 order_column="timestamp"
 #             ),
-#             sink_pfield=PartitionFieldConfig(
+#             sink_meta_columns=StoreMeta(
 #                 partition_column="timestamp",
 #                 hash_column="data",
 #                 order_column="timestamp"
 #             ),
-#             source_state_pfield=PartitionFieldConfig(
+#             source_state_meta_columns=StoreMeta(
 #                 partition_column="timestamp",
 #                 hash_column="data",
 #                 order_column="timestamp"
 #             ),
-#             sink_state_pfield=PartitionFieldConfig(
+#             sink_state_meta_columns=StoreMeta(
 #                 partition_column="timestamp",
 #                 hash_column="data",
 #                 order_column="timestamp"
@@ -520,22 +520,22 @@
 #             strategy=HASH_MD5_HASH,
 #             partition_column_type="int",
 #             initial_partition_interval=100,
-#             source_pfield=PartitionFieldConfig(
+#             source_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column=None,  # No hash column, will use all fields
 #                 order_column="id"
 #             ),
-#             sink_pfield=PartitionFieldConfig(
+#             sink_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column=None,  # No hash column, will use all fields
 #                 order_column="id"
 #             ),
-#             source_state_pfield=PartitionFieldConfig(
+#             source_state_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column=None,
 #                 order_column="id"
 #             ),
-#             sink_state_pfield=PartitionFieldConfig(
+#             sink_state_meta_columns=StoreMeta(
 #                 partition_column="id",
 #                 hash_column=None,
 #                 order_column="id"

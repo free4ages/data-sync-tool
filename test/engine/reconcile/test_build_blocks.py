@@ -44,18 +44,18 @@ class TestBuildBlocks:
         config = MagicMock(spec=ReconciliationConfig)
         config.partition_column_type = "int"
         config.strategy = HASH_MD5_HASH
-        config.source_pfield = MagicMock(
+        config.source_meta_columns = MagicMock(
             hash_column="hash_col",
             partition_column="id",
             order_column="id"
         )
-        config.source_state_pfield = config.source_pfield
-        config.sink_pfield = MagicMock(
+        config.source_state_meta_columns = config.source_meta_columns
+        config.sink_meta_columns = MagicMock(
             hash_column="hash_col",
             partition_column="id",
             order_column="id"
         )
-        config.sink_state_pfield = config.sink_pfield
+        config.sink_state_meta_columns = config.sink_meta_columns
         config.filters = []
         config.joins = []
         return config
@@ -110,9 +110,9 @@ class TestBuildBlocks:
 
         # Test with int partition type
         mock_reconciliation_config.partition_column_type = "int"
-        mock_reconciliation_config.source_pfield.partition_column = "id"
-        mock_reconciliation_config.sink_pfield.partition_column = "id"
-        mock_reconciliation_config.source_state_pfield.partition_column = "id"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "id"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "id"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "id"
         
         intervals = [100, 10, 1]
         
@@ -138,9 +138,9 @@ class TestBuildBlocks:
         mock_source_adapter.fetch.return_value = source_data
         mock_sink_adapter.fetch.return_value = sink_data
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start_time = datetime(2023, 1, 1)
         end_time = datetime(2023, 1, 2)
@@ -208,9 +208,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.return_value = sink_data
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 2)
         end = datetime(2023, 1, 5)
@@ -264,9 +264,9 @@ class TestBuildBlocks:
         
         # Configure for datetime
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 1)
         end = datetime(2023, 1, 2)
@@ -326,9 +326,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.side_effect = mock_sink_fetch
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 1)
         end = datetime(2023, 1, 2)
@@ -363,9 +363,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.side_effect = mock_sink_fetch
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 1)
         end = datetime(2023, 1, 2)
@@ -402,9 +402,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.return_value = sink_data
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         # Create datetime start/end times
         start = datetime(2023, 1, 1)
@@ -449,9 +449,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.side_effect = mock_sink_fetch
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 1)
         end = datetime(2023, 1, 2)
@@ -489,9 +489,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.return_value = sink_data
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 3)
         end = datetime(2023, 1, 7)
@@ -584,9 +584,9 @@ class TestBuildBlocks:
         mock_sink_adapter.fetch.side_effect = mock_sink_fetch
         
         mock_reconciliation_config.partition_column_type = "datetime"
-        mock_reconciliation_config.source_pfield.partition_column = "created_at"
-        mock_reconciliation_config.sink_pfield.partition_column = "created_at"
-        mock_reconciliation_config.source_state_pfield.partition_column = "created_at"
+        # mock_reconciliation_config.source_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.sink_meta_columns.partition_column = "created_at"
+        # mock_reconciliation_config.source_state_meta_columns.partition_column = "created_at"
         
         start = datetime(2023, 1, 1)
         end = datetime(2023, 1, 4)

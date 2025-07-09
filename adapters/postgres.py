@@ -1,3 +1,4 @@
+from core.query import RowHashMeta, BlockHashMeta, BlockNameMeta
 from typing import Dict, Tuple
 import psycopg2
 
@@ -17,7 +18,7 @@ class PostgresAdapter(Adapter):
         self.cursor = self.conn.cursor()
 
     def _build_group_name_expr(self, field: Field) -> str:
-        metadata = field.metadata
+        metadata: BlockNameMeta = field.metadata
         level = metadata.level
         intervals = metadata.intervals
         partition_column = metadata.partition_column
@@ -51,62 +52,26 @@ class PostgresAdapter(Adapter):
         else:
             raise ValueError(f"Unsupported partition type: {partition_column}")
 
-        # if part_type == 'datetime':
-        #     factors = []
-        #     cur = int(interval)
-        #     while cur >= 1:
-        #         factors.append(cur)
-        #         cur = cur // int(factor)
-        #         if cur == 0:
-        #             factors.append(1)
-        #             break
-        #     segments = []
-        #     for idx, fct in enumerate(factors):
-        #         if idx == 0:
-        #             expr = f"FLOOR(EXTRACT(EPOCH FROM {group_field.expr}) / {fct})"
-        #         else:
-        #             prev = factors[idx-1]
-        #             expr = f"FLOOR((EXTRACT(EPOCH FROM {group_field.expr}) % {prev}) / {fct})"
-        #         segments.append(f"LPAD(({expr})::text, 2, '0')")
-        #     return " || '-' || ".join(segments)
-        # elif part_type == 'int':
-        #     factors = []
-        #     cur = int(interval)
-        #     while cur >= 1:
-        #         factors.append(cur)
-        #         cur = cur // int(factor)
-        #         if cur == 0:
-        #             factors.append(1)
-        #             break
-        #     segments = []
-        #     base = group_field.expr
-        #     for idx, fct in enumerate(factors):
-        #         if idx == 0:
-        #             expr = f"FLOOR({base} / {fct})"
-        #         else:
-        #             prev = factors[idx-1]
-        #             expr = f"FLOOR(({base} % {prev}) / {fct})"
-        #         segments.append(f"LPAD(({expr})::text, 2, '0')")
-        #     return " || '-' || ".join(segments)
-        # elif part_type == 'uuid':
-        #     return f"SUBSTR({group_field.expr},1,{uuid_len})"
-        # else:
-        #     raise ValueError(f"Unsupported partition type: {part_type}")
+    def _build_rowhash_expr(self, field: Field) -> str:
+        metadata: RowHashMeta = field.metadata
+        expr=""
+        if metadata.hash_column:
+            expr = metadata.hash_column
+        elif metadata.strategy == MD5_SUM_HASH:
+            concat = ",".join([f"{x.expr}" for x in metadata.fields])
+            expr = f"(('x'||substr(md5(CONCAT({concat})),1,8))::bit(32)::int)"
+        elif metadata.strategy == HASH_MD5_HASH:
+            concat = ",".join([f"{x.expr}" for x in metadata.fields])
+            expr = f"md5(CONCAT({concat}))"
+        return expr
     
     def _build_blockhash_expr(self, field: Field):
-        metadata = field.metadata
+        metadata: BlockHashMeta = field.metadata
+        inner_expr = self._build_rowhash_expr(field)
         if metadata.strategy == MD5_SUM_HASH:
-            if metadata.hash_column:
-                expr = f"sum({metadata.hash_column}::bigint)"
-            else:
-                concat = ",".join([f"{x.expr}" for x in metadata.fields])
-                expr = f"sum((('x'||substr(md5(CONCAT({concat})),1,8))::bit(32)::int)::numeric)"
+            expr = f"sum({inner_expr}::numeric)"
         elif metadata.strategy == HASH_MD5_HASH:
-            if metadata.hash_column:
-                expr = f"md5(string_agg({metadata.hash_column},',' order by {metadata.order_column}))"
-            else:
-                concat = ",".join([f"{x.expr}" for x in metadata.fields])
-                expr = f"md5(string_agg(md5(CONCAT({concat})),',' order by {metadata.order_column}))"
+            expr = f"md5(string_agg({inner_expr},',' order by {metadata.order_column}))"
         return expr
 
 
@@ -119,6 +84,9 @@ class PostgresAdapter(Adapter):
                 rewritten.append(Field(expr=expr, alias=f.alias, type='column'))
             elif f.type == "blockname":
                 expr = self._build_group_name_expr(f)
+                rewritten.append(Field(expr=expr, alias=f.alias, type='column'))
+            elif f.type == "rowhash":
+                expr = self._build_rowhash_expr(f)
                 rewritten.append(Field(expr=expr, alias=f.alias, type='column'))
             else:
                 rewritten.append(f)

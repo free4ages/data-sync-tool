@@ -44,7 +44,12 @@ def postgres_source_adapter(postgres_connection_params):
             table=MagicMock(table="source_table", dbschema="public", alias="src"),
             filters=[],
             joins=[],
-            batch_size=1000
+            batch_size=1000,
+            meta_columns = MagicMock(
+                hash_column="hash_value",
+                partition_column="created_at",
+                order_column="id"
+            )
         ),
         role='source'
     )
@@ -74,7 +79,12 @@ def postgres_sink_adapter(postgres_connection_params):
             table=MagicMock(table="sink_table", dbschema="public", alias="snk"),
             filters=[],
             joins=[],
-            batch_size=1000
+            batch_size=1000,
+            meta_columns = MagicMock(
+                hash_column="hash_value",
+                partition_column="created_at",
+                order_column="id"
+            )
         ),
         role='sink'
     )
@@ -84,15 +94,44 @@ def postgres_sink_adapter(postgres_connection_params):
 
 
 @pytest.fixture
-def mock_pipeline(postgres_source_adapter, postgres_sink_adapter):
+def int_mock_pipeline(postgres_source_adapter, postgres_sink_adapter):
     """Create a mock Pipeline object."""
     pipeline = MagicMock()
-    pipeline.source = MagicMock(config=MagicMock(batch_size=1000))
-    pipeline.sink = MagicMock(config=MagicMock(batch_size=1000))
+    pipeline.source = MagicMock(adapter_config=MagicMock(batch_size=1000))
+    pipeline.sink = MagicMock(adapter_config=MagicMock(batch_size=1000))
     pipeline.sourcestate = postgres_source_adapter
     pipeline.sinkstate = postgres_sink_adapter
+    pipeline.sourcestate.adapter_config.meta_columns=MagicMock(
+        hash_column="hash_value",
+        partition_column="id",
+        order_column="id"
+    )
+    pipeline.sinkstate.adapter_config.meta_columns=MagicMock(
+        hash_column="hash_value",
+        partition_column="id",
+        order_column="id"
+    )
     return pipeline
 
+@pytest.fixture
+def datetime_mock_pipeline(postgres_source_adapter, postgres_sink_adapter):
+    """Create a mock Pipeline object."""
+    pipeline = MagicMock()
+    pipeline.source = MagicMock(adapter_config=MagicMock(batch_size=1000))
+    pipeline.sink = MagicMock(adapter_config=MagicMock(batch_size=1000))
+    pipeline.sourcestate = postgres_source_adapter
+    pipeline.sinkstate = postgres_sink_adapter
+    pipeline.sourcestate.adapter_config.meta_columns=MagicMock(
+        hash_column="hash_value",
+        partition_column="created_at",
+        order_column="id"
+    )
+    pipeline.sinkstate.adapter_config.meta_columns=MagicMock(
+        hash_column="hash_value",
+        partition_column="created_at",
+        order_column="id"
+    )
+    return pipeline
 
 @pytest.fixture
 def int_reconciliation_config():
@@ -100,18 +139,18 @@ def int_reconciliation_config():
     config = MagicMock(spec=ReconciliationConfig)
     config.partition_column_type = "int"
     config.strategy = HASH_MD5_HASH
-    config.source_pfield = MagicMock(
-        hash_column="hash_value",
-        partition_column="id",
-        order_column="id"
-    )
-    config.source_state_pfield = config.source_pfield
-    config.sink_pfield = MagicMock(
-        hash_column="hash_value",
-        partition_column="id",
-        order_column="id"
-    )
-    config.sink_state_pfield = config.sink_pfield
+    # config.source_meta_columns = MagicMock(
+    #     hash_column="hash_value",
+    #     partition_column="id",
+    #     order_column="id"
+    # )
+    # config.source_state_meta_columns = config.source_meta_columns
+    # config.sink_meta_columns = MagicMock(
+    #     hash_column="hash_value",
+    #     partition_column="id",
+    #     order_column="id"
+    # )
+    # config.sink_state_meta_columns = config.sink_meta_columns
     config.filters = []
     config.joins = []
     config.initial_partition_interval = 10000
@@ -126,18 +165,18 @@ def datetime_reconciliation_config():
     config = MagicMock(spec=ReconciliationConfig)
     config.partition_column_type = "datetime"
     config.strategy = HASH_MD5_HASH
-    config.source_pfield = MagicMock(
-        hash_column="hash_value",
-        partition_column="created_at",
-        order_column="id"
-    )
-    config.source_state_pfield = config.source_pfield
-    config.sink_pfield = MagicMock(
-        hash_column="hash_value",
-        partition_column="created_at",
-        order_column="id"
-    )
-    config.sink_state_pfield = config.sink_pfield
+    # config.source_meta_columns = MagicMock(
+    #     hash_column="hash_value",
+    #     partition_column="created_at",
+    #     order_column="id"
+    # )
+    # config.source_state_meta_columns = config.source_meta_columns
+    # config.sink_meta_columns = MagicMock(
+    #     hash_column="hash_value",
+    #     partition_column="created_at",
+    #     order_column="id"
+    # )
+    # config.sink_state_meta_columns = config.sink_meta_columns
     config.filters = []
     config.joins = []
     config.initial_partition_interval = 86400  # 1 day in seconds
@@ -149,7 +188,7 @@ def datetime_reconciliation_config():
 class TestPrepareDataBlocks:
     """Tests for prepare_data_blocks function with PostgresAdapter."""
 
-    def test_prepare_data_blocks_int_partition(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_int_partition(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with integer partition column."""
         # Execute function with int partition column
         start = 1
@@ -158,7 +197,7 @@ class TestPrepareDataBlocks:
         interval_reduction_factor = 5
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=9999,
             max_block_size=max_block_size,
@@ -193,11 +232,11 @@ class TestPrepareDataBlocks:
                 assert block.num_rows <= max_block_size, \
                     f"Block with {block.num_rows} rows exceeds max_block_size of {max_block_size}"
 
-    def test_prepare_data_blocks_int_specific_ranges(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_int_specific_ranges(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with specific integer ranges to verify status mapping."""
         # Test range where data is matching (1-10000)
         blocks_matching, statuses_matching = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=5000,
             max_block_size=5000,
@@ -212,7 +251,7 @@ class TestPrepareDataBlocks:
         
         # Test range where data is mismatched (10001-20000)
         blocks_mismatched, statuses_mismatched = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=5000,
             max_block_size=5000,
@@ -227,7 +266,7 @@ class TestPrepareDataBlocks:
         
         # Test range where data is in source but not sink (20001-30000)
         blocks_source_only, statuses_source_only = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=5000,
             max_block_size=5000,
@@ -242,7 +281,7 @@ class TestPrepareDataBlocks:
         
         # Test range where data is in sink but not source (30001-40000)
         blocks_sink_only, statuses_sink_only = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=5000,
             max_block_size=5000,
@@ -255,12 +294,12 @@ class TestPrepareDataBlocks:
         assert all(status == 'D' for status in statuses_sink_only), \
             "All blocks in range 30001-40000 should be deleted (in sink but not source)"
 
-    def test_prepare_data_blocks_block_size_constraints(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_block_size_constraints(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with different block size constraints."""
         # Test with small block size to force deep recursion
         small_block_size = 100
         blocks_small, statuses_small = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=10000,
             max_block_size=small_block_size,
@@ -278,7 +317,7 @@ class TestPrepareDataBlocks:
         # Test with large block size
         large_block_size = 10000
         blocks_large, statuses_large = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=5000,
             max_block_size=large_block_size,
@@ -291,14 +330,14 @@ class TestPrepareDataBlocks:
         assert len(blocks_large) <= len(blocks_small), \
             "Should have fewer blocks with larger block size"
 
-    def test_prepare_data_blocks_with_merge(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_with_merge(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with conditions that trigger block merging."""
         # Configure to produce many small blocks with same status that should be merged
         max_block_size = 500
         # sink_max_block_size = 5000  # Large enough to allow merging
         # import pdb;pdb.set_trace()
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=1000,
             max_block_size=max_block_size,
@@ -317,14 +356,14 @@ class TestPrepareDataBlocks:
                 f"Merged block with {block.num_rows} rows exceeds max_block_size of {max_block_size}"
         
 
-    def test_prepare_data_blocks_datetime_partition(self, mock_pipeline, datetime_reconciliation_config):
+    def test_prepare_data_blocks_datetime_partition(self, datetime_mock_pipeline, datetime_reconciliation_config):
         """Test prepare_data_blocks with datetime partition column."""
         # Define datetime range
         start = datetime(2023, 1, 1, tzinfo=pytz.utc)
         end = datetime(2023, 1, 31, tzinfo=pytz.utc)
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=datetime_mock_pipeline,
             r_config=datetime_reconciliation_config,
             initial_partition_interval=86400,  # 1 day in seconds
             max_block_size=5000,
@@ -345,11 +384,11 @@ class TestPrepareDataBlocks:
             assert block.start >= start, "Block start should be >= overall start"
             assert block.end <= end, "Block end should be <= overall end"
 
-    def test_prepare_data_blocks_force_update(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_force_update(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with force_update flag."""
         # Execute with force_update=True
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=9999,
             max_block_size=5000,
@@ -370,14 +409,14 @@ class TestPrepareDataBlocks:
         assert 'A' in status_counts, "Should have added blocks with force_update"
         assert 'D' in status_counts, "Should have deleted blocks with force_update"
 
-    def test_prepare_data_blocks_custom_intervals(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_custom_intervals(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 2000  # Small interval
         interval_reduction_factor = 10  # Large reduction factor
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=500,
@@ -396,14 +435,14 @@ class TestPrepareDataBlocks:
         max_block_size = max(block_sizes) if block_sizes else 0
         assert max_block_size <= 500, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_full_datetime(self, mock_pipeline, datetime_reconciliation_config):
+    def test_prepare_data_blocks_full_datetime(self, datetime_mock_pipeline, datetime_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 7*86400  # Small interval
         interval_reduction_factor = 64  # Large reduction factor
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=datetime_mock_pipeline,
             r_config=datetime_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=1,
@@ -424,14 +463,14 @@ class TestPrepareDataBlocks:
         # max_block_size = max(block_sizes) if block_sizes else 0
         # assert max_block_size <= 5000, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_full_int(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_full_int(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 10000  # Small interval
         interval_reduction_factor = 10  # Large reduction factor
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=1,
@@ -452,16 +491,18 @@ class TestPrepareDataBlocks:
         max_block_size = max(block_sizes) if block_sizes else 0
         assert max_block_size <= 5000, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_from_raw_field_int(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_from_raw_field_int(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 10000  # Small interval
         interval_reduction_factor = 10  # Large reduction factor
-        int_reconciliation_config.source_state_pfield.hash_column=None
-        int_reconciliation_config.sink_state_pfield.hash_column=None
+        int_mock_pipeline.sourcestate.adapter_config.meta_columns.hash_column=None
+        int_mock_pipeline.sinkstate.adapter_config.meta_columns.hash_column=None
+        # int_reconciliation_config.source_state_meta_columns.hash_column=None
+        # int_reconciliation_config.sink_state_meta_columns.hash_column=None
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=1,
@@ -482,16 +523,18 @@ class TestPrepareDataBlocks:
         max_block_size = max(block_sizes) if block_sizes else 0
         assert max_block_size <= 5000, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_from_raw_field_datetime(self, mock_pipeline, datetime_reconciliation_config):
+    def test_prepare_data_blocks_from_raw_field_datetime(self, datetime_mock_pipeline, datetime_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 7*86400  # Small interval
         interval_reduction_factor = 64  # Large reduction factor
-        datetime_reconciliation_config.source_state_pfield.hash_column=None
-        datetime_reconciliation_config.sink_state_pfield.hash_column=None
+        datetime_mock_pipeline.sourcestate.adapter_config.meta_columns.hash_column=None
+        datetime_mock_pipeline.sinkstate.adapter_config.meta_columns.hash_column=None
+        # datetime_reconciliation_config.source_state_meta_columns.hash_column=None
+        # datetime_reconciliation_config.sink_state_meta_columns.hash_column=None
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=datetime_mock_pipeline,
             r_config=datetime_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=1,
@@ -512,17 +555,19 @@ class TestPrepareDataBlocks:
         max_block_size = max(block_sizes) if block_sizes else 0
         assert max_block_size <= 5000, "Max block size should respect max_block_size"
 
-    def test_prepare_data_blocks_sum_md5_hash_int(self, mock_pipeline, int_reconciliation_config):
+    def test_prepare_data_blocks_sum_md5_hash_int(self, int_mock_pipeline, int_reconciliation_config):
         """Test prepare_data_blocks with custom interval settings."""
         # Test with custom interval parameters
         initial_partition_interval = 10000  # Small interval
         interval_reduction_factor = 10  # Large reduction factor
-        int_reconciliation_config.source_state_pfield.hash_column=None
-        int_reconciliation_config.sink_state_pfield.hash_column=None
+        int_mock_pipeline.sourcestate.adapter_config.meta_columns.hash_column=None
+        int_mock_pipeline.sinkstate.adapter_config.meta_columns.hash_column=None
+        # int_reconciliation_config.source_state_meta_columns.hash_column=None
+        # int_reconciliation_config.sink_state_meta_columns.hash_column=None
         int_reconciliation_config.strategy = MD5_SUM_HASH
         
         blocks, statuses = prepare_data_blocks(
-            pipeline=mock_pipeline,
+            pipeline=int_mock_pipeline,
             r_config=int_reconciliation_config,
             initial_partition_interval=initial_partition_interval,
             max_block_size=1,

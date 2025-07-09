@@ -1,4 +1,4 @@
-.PHONY: setup start stop test test-prepare-data-blocks clean
+make.PHONY: setup start stop test test-prepare-data-blocks clean
 
 # Docker services
 setup:
@@ -19,7 +19,7 @@ start:
 # Stop the Docker containers
 stop:
 	@echo "Stopping Docker containers..."
-	docker-compose down
+	docker compose down
 
 # Run specific test for prepare_data_blocks
 test-prepare-data-blocks: start

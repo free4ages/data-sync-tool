@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 from engine.reconcile import build_data_range_query, get_data_range
-from core.config import MD5_SUM_HASH, PartitionFieldConfig, ReconciliationConfig, SourceConfig, SinkConfig, StateConfig, FieldConfig, FilterConfig, JoinConfig, TableConfig
+from core.config import MD5_SUM_HASH, StoreMeta, ReconciliationConfig, SourceConfig, SinkConfig, StateConfig, FieldConfig, FilterConfig, JoinConfig, TableConfig
 from core.query import Filter, Field, Table, Join
 from datetime import datetime
 
@@ -11,18 +11,19 @@ class TestGetDataRange(unittest.TestCase):
             strategy=MD5_SUM_HASH,
             partition_column_type="datetime",
             initial_partition_interval=25*100,
-            source_pfield=PartitionFieldConfig(partition_column="timestamp"),
-            sink_pfield=PartitionFieldConfig(partition_column="timestamp")
+            # source_meta_columns=StoreMeta(partition_column="timestamp"),
+            # sink_meta_columns=StoreMeta(partition_column="timestamp")
         )
         self.src_config = SourceConfig(
             datastore="db1",
             table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias"),
-            batch_size=100
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
         self.sink_config = SinkConfig(
             datastore="db1",
             table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias"),
-            batch_size=100
+            batch_size=100,
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
         self.source_state = MagicMock()
         self.sink_state = MagicMock()

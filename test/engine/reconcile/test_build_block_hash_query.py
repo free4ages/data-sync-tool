@@ -1,36 +1,35 @@
+from core.query import Query
 import unittest
 from datetime import datetime, timedelta
 from engine.reconcile import build_block_hash_query
-from core.config import HASH_MD5_HASH, FieldConfig, ReconciliationConfig, SourceConfig, SinkConfig, PartitionFieldConfig, TableConfig
+from core.config import HASH_MD5_HASH, FieldConfig, ReconciliationConfig, SourceConfig, SinkConfig, StoreMeta, TableConfig
 
 class TestBuildBlockHashQuery(unittest.TestCase):
 
     def setUp(self):
         self.source_config = SourceConfig(
             datastore="source_datastore",
-            batch_size=1000,
+            #batch_size=1000,
             table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias"),
-            hash_column="source_hash_column",
+            meta_columns = StoreMeta(
+                partition_column="partition_column",
+                hash_column="source_hash_column",
+                order_column="order_column"
+            ),
             fields=[FieldConfig(column="field1"), FieldConfig(column="field2")]
         )
         self.sink_config = SinkConfig(
             datastore="sink_datastore",
             batch_size=1000,
             table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias"),
-            hash_column="sink_hash_column",
-            fields=[FieldConfig(column="field1"), FieldConfig(column="field2")]
-        )
-        self.reconciliation_config = ReconciliationConfig(
-            source_pfield=PartitionFieldConfig(
-                partition_column="partition_column",
-                hash_column="source_hash_column",
-                order_column="order_column"
-            ),
-            sink_pfield=PartitionFieldConfig(
+            meta_columns=StoreMeta(
                 partition_column="partition_column",
                 hash_column="sink_hash_column",
                 order_column="order_column"
             ),
+            fields=[FieldConfig(column="field1"), FieldConfig(column="field2")]
+        )
+        self.reconciliation_config = ReconciliationConfig(
             partition_column_type="datetime",
             strategy=HASH_MD5_HASH,
             initial_partition_interval=365*24*60*60
@@ -78,7 +77,7 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         intervals = [86400]
         interval_reduction_factor = 2
 
-        query = build_block_hash_query(
+        query: Query = build_block_hash_query(
             start=start,
             end=end,
             level=level,
@@ -256,7 +255,8 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         level = 1
         intervals = [10]
 
-        self.reconciliation_config.source_pfield.hash_column = None
+        # self.reconciliation_config.source_meta_columns.hash_column = None
+        self.source_config.meta_columns.hash_column=None
 
         query = build_block_hash_query(
             start=start,
@@ -292,7 +292,8 @@ class TestBuildBlockHashQuery(unittest.TestCase):
         level = 1
         intervals = [86400]
 
-        self.reconciliation_config.sink_pfield.hash_column = None
+        # self.reconciliation_config.sink_meta_columns.hash_column = None
+        self.sink_config.meta_columns.hash_column=None
 
         query = build_block_hash_query(
             start=start,

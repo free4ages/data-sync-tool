@@ -1,5 +1,5 @@
 import unittest
-from core.config import Config, DatabaseConfig, PartitionFieldConfig, WebhookConfig, NatsConfig, RedisConfig, HTTPConfig, PipelineConfig, SourceConfig, SinkConfig, StateConfig, ReconciliationConfig, EnrichmentConfig, JoinConfig, FilterConfig, FieldConfig, MergeStrategyConfig,TableConfig
+from core.config import Config, DatabaseConfig, StoreMeta, WebhookConfig, NatsConfig, RedisConfig, HTTPConfig, PipelineConfig, SourceConfig, SinkConfig, StateConfig, ReconciliationConfig, EnrichmentConfig, JoinConfig, FilterConfig, FieldConfig, MergeStrategyConfig,TableConfig
 
 class TestConfig(unittest.TestCase):
     def setUp(self):
@@ -68,7 +68,6 @@ class TestConfig(unittest.TestCase):
                     name="data_move_db1_users_to_db2_users",
                     source=SourceConfig(
                         datastore="db1",
-                        batch_size=100,
                         table=TableConfig(
                             table="users",
                             alias="u",
@@ -132,7 +131,9 @@ class TestConfig(unittest.TestCase):
                             strategy="delete_insert",
                             allow_delete=True
                         ),
-                        unique_key=["sname", "sid"],
+                        meta_columns=StoreMeta(
+                            unique_columns=["sname", "sid"]
+                        ),
                         filters=[
                             FilterConfig(
                                 column="order_total",
@@ -243,50 +244,50 @@ class TestConfig(unittest.TestCase):
                     reconciliation=[
                         ReconciliationConfig(
                             strategy="md5sum_hash",
-                            partition_column="created_at",
+                            # partition_column="created_at",
                             partition_column_type="datetime",
                             start="lambda: datetime.datetime(2020,2,1)",
                             end="lambda: datetime.datetime.now()",
                             initial_partition_interval=1*365*24*60*60,
-                            source_pfield=PartitionFieldConfig(
-                                partition_column='created_at'
-                            ),
-                            sink_pfield=PartitionFieldConfig(
-                                partition_column='checksum',
-                                hash_column='checksum'
-                            )
+                            # source_meta_columns=StoreMeta(
+                            #     partition_column='created_at'
+                            # ),
+                            # sink_meta_columns=StoreMeta(
+                            #     partition_column='checksum',
+                            #     hash_column='checksum'
+                            # )
                         ),
                         ReconciliationConfig(
                             strategy="hash_md5_hash",
-                            partition_column="created_at",
+                            # partition_column="created_at",
                             partition_column_type="datetime",
                             start="lambda: datetime.datetime(2020,2,1)",
                             end="lambda: datetime.datetime(2024,1,1)",
-                            source_order_column="u.id",
+                            # source_order_column="u.id",
                             initial_partition_interval=1*365*24*60*60,
-                            source_pfield=PartitionFieldConfig(
-                                partition_column='created_at'
-                            ),
-                            sink_pfield=PartitionFieldConfig(
-                                partition_column='checksum',
-                                hash_column='checksum'
-                            )
+                            # source_meta_columns=StoreMeta(
+                            #     partition_column='created_at'
+                            # ),
+                            # sink_meta_columns=StoreMeta(
+                            #     partition_column='checksum',
+                            #     hash_column='checksum'
+                            # )
                         ),
                         ReconciliationConfig(
                             strategy="hash_md5_hash",
-                            partition_column="id",
+                            # partition_column="id",
                             partition_column_type="uuid",
                             start="",
                             end="",
-                            source_order_column="u.id",
+                            # source_order_column="u.id",
                             initial_partition_interval=1,
-                            source_pfield=PartitionFieldConfig(
-                                partition_column='created_at'
-                            ),
-                            sink_pfield=PartitionFieldConfig(
-                                partition_column='checksum',
-                                hash_column='checksum'
-                            )
+                            # source_meta_columns=StoreMeta(
+                            #     partition_column='created_at'
+                            # ),
+                            # sink_meta_columns=StoreMeta(
+                            #     partition_column='checksum',
+                            #     hash_column='checksum'
+                            # )
                         )
                     ],
                     enrichment=[
@@ -350,7 +351,7 @@ class TestConfig(unittest.TestCase):
         sink = self.config.pipelines[0].sink
         self.assertEqual(sink.table.table, "users")
         self.assertEqual(sink.merge_strategy.strategy, "delete_insert")
-        self.assertEqual(sink.unique_key, ["sname", "sid"])
+        self.assertEqual(sink.meta_columns.unique_columns, ["sname", "sid"])
         self.assertEqual(sink.fields[0].column, "sname")
         # self.assertEqual(sink.fields[3].source_column, "TMPL({{ name }} - ${{ o__total }})")
         # self.assertEqual(sink.fields[4].source_column, "lambda r: 1 if r['o__total']>1000 else 0")

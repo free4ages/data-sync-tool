@@ -1,9 +1,10 @@
+from core.config import Block
 from datetime import UTC, datetime, date, timedelta
 import math
 from typing import List, Literal, Tuple, Dict, Union
 from adapters.base import Adapter
 from core.config import HASH_MD5_HASH, MD5_SUM_HASH, PipelineConfig, ReconciliationConfig, SinkConfig, SourceConfig, StateConfig
-from core.query import BlockHashMeta, BlockNameMeta, Join, Query, Field, Filter, Table
+from core.query import BlockHashMeta, BlockNameMeta, Join, Query, Field, Filter, RowHashMeta, Table
 from utils.utils_fn import add_tz, find_interval_factor, get_value
 
 
@@ -45,9 +46,9 @@ def build_table_from_config(config):
     return table
 
 
-def build_data_range_query(r_config: ReconciliationConfig, src_config: Union[SourceConfig, SinkConfig, StateConfig]):
+def build_data_range_query(src_config: Union[SourceConfig, SinkConfig, StateConfig]):
     # get min/max of partition field from source
-    partition_column = r_config.source_state_pfield.partition_column
+    partition_column = src_config.meta_columns.partition_column
 
     # select fields
     select = [
@@ -108,12 +109,12 @@ def get_data_range(
 
     if not (user_start and user_end):
         if r_config.strategy in (MD5_SUM_HASH, HASH_MD5_HASH):
-            query = build_data_range_query(r_config, sourcestate.adapter_config)
+            query = build_data_range_query( sourcestate.adapter_config)
             result = sourcestate.fetch_one(query, op_name="range_search")
             sstart = result["start"] if result else None
             send = result["end"] if result else None
 
-            query = build_data_range_query(r_config, sinkstate.adapter_config)
+            query = build_data_range_query( sinkstate.adapter_config)
             result = sinkstate.fetch_one(query, op_name="range_search")
             skstart = result["start"] if result else None
             skend = result["end"] if result else None
@@ -130,13 +131,7 @@ def get_data_range(
 
     return sstart, send
 
-class Block:
-    def __init__(self, start: Union[datetime,int,str], end: Union[datetime,int,str], level: int, num_rows: int, hash: str):
-        self.start = start
-        self.end = end
-        self.level = level
-        self.num_rows = num_rows
-        self.hash = hash
+
 
 # Build Query object based on config and partition type
 
@@ -151,14 +146,13 @@ def build_block_hash_query(
 ) -> Query:
     # import pdb;pdb.set_trace()
     partition_column_type = r_config.partition_column_type
-    if target=="source":
-        hash_column = r_config.source_state_pfield.hash_column
-        partition_column = r_config.source_state_pfield.partition_column
-        order_column = r_config.source_state_pfield.order_column
-    else:
-        hash_column = r_config.sink_state_pfield.hash_column
-        partition_column = r_config.sink_state_pfield.partition_column
-        order_column = r_config.sink_state_pfield.order_column
+    
+    hash_column = config.meta_columns.hash_column
+    partition_column = config.meta_columns.partition_column
+    order_column = config.meta_columns.order_column
+    # hash_column = r_config.sink_state_meta_columns.hash_column
+    # partition_column = r_config.sink_state_meta_columns.partition_column
+    # order_column = r_config.sink_state_meta_columns.order_column
     block_hash_field = Field(
         expr=f"{partition_column}", 
         alias="blockhash", 
@@ -257,6 +251,8 @@ def to_blocks(
         blocks.append(block)
     return blocks
 
+
+    
 
 
 def calculate_block_status(src_blocks: List[Block], snk_blocks: List[Block]) -> Tuple[List[Block], Status]:
@@ -423,7 +419,7 @@ def prepare_data_blocks(
     sourcestate, sinkstate = pipeline.sourcestate, pipeline.sinkstate
     start, end = get_data_range(sourcestate, sinkstate, r_config, start=start, end=end)
 
-    max_block_size = max_block_size or r_config.batch_size
+    max_block_size = max_block_size or r_config.max_block_size
     # sink_max_block_size = sink_max_block_size or sink.adapter_config.batch_size
     initial_partition_interval = initial_partition_interval or r_config.initial_partition_interval
     intervals = []
@@ -435,3 +431,14 @@ def prepare_data_blocks(
 
     blocks, status = build_blocks(sourcestate, sinkstate, start, end, r_config, max_block_size, intervals, force_update=force_update)
     return blocks, status
+    
+
+
+# def load(
+#     pipeline: 'Pipeline',
+#     r_config: ReconciliationConfig,
+#     blocks: List[Block],
+#     statuses: List[str]
+# ):
+#     sourcestate, sinkstate = pipeline.sourcestate, pipeline.sinkstate
+#     source, sink = pipeline.source, pipeline.sink

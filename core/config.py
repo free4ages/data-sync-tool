@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from typing import List, Optional, Literal, Union, Dict, Any
 from pydantic import BaseModel, Field
+from datetime import datetime
 import yaml
 import datetime
 from typing import List, Dict, Optional, Union, Callable, Any, Annotated
@@ -54,6 +55,14 @@ def parse_dynamic_field(value: Any) -> Any:
         elif value.strip().startswith("lambda"):
             return parse_lambda_from_string(value)
     return value
+
+class Block:
+    def __init__(self, start: Union[datetime,int,str], end: Union[datetime,int,str], level: int, num_rows: int, hash: str):
+        self.start = start
+        self.end = end
+        self.level = level
+        self.num_rows = num_rows
+        self.hash = hash
 
 class DynamicModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -136,6 +145,7 @@ class FieldConfig(DynamicModel):
     alias: Optional[str] = None
     source_column: Optional[Union[str,Callable]] = None
     source: Optional[str] = None
+    track: bool = True
 
     @model_validator(mode='before')
     @classmethod
@@ -154,6 +164,13 @@ class TableConfig(DynamicModel):
     alias: Optional[str] = None
     dbschema: Optional[str] = None
 
+
+class StoreMeta(BaseModel):
+    partition_column: Optional[str] = None
+    hash_column: Optional[str] = None
+    order_column: Optional[str] = None
+    unique_columns: Optional[List[str]] = None
+
 class SourceConfig(DynamicModel):
     datastore: str
     table: TableConfig
@@ -161,6 +178,7 @@ class SourceConfig(DynamicModel):
     joins: Optional[List[JoinConfig]] = None
     filters: Optional[List[FilterConfig]] = None
     fields: Optional[List[FieldConfig]] = None
+    meta_columns: Optional[StoreMeta] = None
 
     @property
     def table_fields(self):
@@ -194,9 +212,9 @@ class SinkConfig(DynamicModel):
     batch_size: int
     adapter: Optional[str] = None
     merge_strategy: Optional[MergeStrategyConfig] = None
-    unique_key: List[str] = []
     filters: Optional[List[FilterConfig]] = []
     fields: Optional[List[FieldConfig]] = []
+    meta_columns : Optional[StoreMeta] = None
 
     @property
     def table_fields(self):
@@ -208,13 +226,9 @@ class StateConfig(DynamicModel):
     adapter: Optional[str] = None
     filters: Optional[List[FilterConfig]] = []
     fields: Optional[List[FieldConfig]] = []
+    meta_columns : Optional[StoreMeta] = None
 
 AdapterConfig = Union[SourceConfig, SinkConfig, StateConfig]
-
-class PartitionFieldConfig(BaseModel):
-    partition_column: Optional[str] = None
-    hash_column: Optional[str] = None
-    order_column: Optional[str] = None
 
 
 class ReconciliationConfig(DynamicModel):
@@ -224,20 +238,20 @@ class ReconciliationConfig(DynamicModel):
     start: Optional[Union[str, Callable]] = None
     end: Optional[Union[str, Callable]] = None
     initial_partition_interval: int
-    batch_size: int = 1000
+    max_block_size: int = 1000
     partition_multiplier: int = 1
-    source_pfield: PartitionFieldConfig
-    sink_pfield: PartitionFieldConfig 
-    source_state_pfield: Optional[PartitionFieldConfig] = None
-    sink_state_pfield: Optional[PartitionFieldConfig] = None
+    source_meta_columns: Optional[StoreMeta] = None
+    sink_meta_columns: Optional[StoreMeta] = None
+    sourcestate_meta_columns: Optional[StoreMeta] = None
+    sinkstate_meta_columns: Optional[StoreMeta] = None
     
-    @model_validator(mode='after')
-    def set_state_fields(self) -> 'ReconciliationConfig':
-        if not self.source_state_pfield:
-            self.source_state_pfield = self.source_pfield
-        if not self.sink_state_pfield:
-            self.sink_state_pfield = self.sink_pfield
-        return self
+    # @model_validator(mode='after')
+    # def set_state_fields(self) -> 'ReconciliationConfig':
+    #     if not self.source_state_meta_columns:
+    #         self.source_state_meta_columns = self.source_meta_columns
+    #     if not self.sink_state_meta_columns:
+    #         self.sink_state_meta_columns = self.sink_meta_columns
+    #     return self
 
 
 class EnrichmentConfig(DynamicModel):

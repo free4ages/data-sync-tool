@@ -1,30 +1,40 @@
-from core.query import Query, Field
-from typing import Dict
+from typing import List
+from typing import Union
+from core.config import  ReconciliationConfig, SinkConfig, SourceConfig, StateConfig
+from core.query import BlockHashMeta, BlockNameMeta, Join, Query, Field, Filter, RowHashMeta, Table
 
 
-def build_checksum_query(pipeline: Dict) -> Query:
-    rec, src = pipeline['reconciliation'], pipeline['source']
-    # fields: count, hash
-    select = [Field(expr='COUNT(1)', alias='count', type='count')]
-    select.append(Field(expr='', alias='group_hash', type='hash', hash_fields=[r['column'] for r in pipeline['transform'].values() if 'column' in r]))
-    return Query(
-        select=select,
-        filters=[f"{rec['sync_column']} BETWEEN '{rec['from']}' AND '{rec.get('till','now()')}'"] + src.get('filters', []),
-        group_by=[rec['sync_column']],
+
+def build_filters_from_config(config: Union[SourceConfig, SinkConfig, StateConfig]) -> List[Filter]:
+    # Build filters
+    filters: list[Filter] = []
+    if config.filters:
+        for filter_cfg in config.filters or []:
+            filters.append(Filter(
+                column=filter_cfg.column,
+                operator=filter_cfg.operator,
+                value=filter_cfg.value
+            ))
+    return filters
+
+def build_joins_from_config(config) -> List[Join]:
+    # Build joins
+    joins = []
+    if config.joins:
+        for join_cfg in config.joins or []:
+            joins.append(Join(
+                table=join_cfg.table,
+                alias=join_cfg.alias,
+                on=join_cfg.on,
+                type=join_cfg.type
+            ))
+    return joins
+
+def build_table_from_config(config) -> Table:
+    # Build From
+    table = Table(
+        table = config.table.table,
+        schema = config.table.dbschema,
+        alias = config.table.alias
     )
-
-def build_fetch_query(pipeline: Dict, timegroup: str) -> Query:
-    rec, src, tr = pipeline['reconciliation'], pipeline['source'], pipeline['transform']
-    select = [Field(expr=v['column'], alias=k, type='column') for k,v in tr.items() if 'column' in v]
-    return Query(
-        select=select,
-        filters=[f"{rec['sync_column']} = '{timegroup}'"] + src.get('filters', []),
-    )
-
-def build_all_fetch_query(pipeline: Dict) -> Query:
-    rec, src, tr = pipeline['reconciliation'], pipeline['source'], pipeline['transform']
-    select = [Field(expr=v['column'], alias=k, type='column') for k,v in tr.items() if 'column' in v]
-    return Query(
-        select=select,
-        filters=[f"{rec['sync_column']} BETWEEN '{rec['from']}' AND '{rec.get('till','now()')}'"] + src.get('filters', []),
-    )
+    return table

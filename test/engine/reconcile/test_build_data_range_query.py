@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 from engine.reconcile import build_data_range_query, get_data_range
-from core.config import MD5_SUM_HASH, PartitionFieldConfig, ReconciliationConfig, SourceConfig, SinkConfig, StateConfig, FieldConfig, FilterConfig, JoinConfig, TableConfig
+from core.config import MD5_SUM_HASH, StoreMeta, ReconciliationConfig, SourceConfig, SinkConfig, StateConfig, FieldConfig, FilterConfig, JoinConfig, TableConfig
 from core.query import Filter, Field, Table, Join
 from datetime import datetime
 
@@ -11,26 +11,26 @@ class TestBuildDataRangeQuery(unittest.TestCase):
             strategy=MD5_SUM_HASH,
             partition_column_type="datetime",
             initial_partition_interval=25*100,
-            source_pfield=PartitionFieldConfig(partition_column="timestamp"),
-            sink_pfield=PartitionFieldConfig(partition_column="timestamp")
+            # source_meta_columns=StoreMeta(partition_column="timestamp"),
+            # sink_meta_columns=StoreMeta(partition_column="timestamp")
         )
         self.src_config = SourceConfig(
             datastore="db1",
             table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias"),
             joins=[JoinConfig(table="join_table", alias="join_alias", on="source_alias.id = join_alias.source_id", type="inner")],
             filters=[FilterConfig(column="status", operator="=", value="active")],
-            batch_size=100
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
         self.sink_config = SinkConfig(
             datastore="db1",
             table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias"),
-            joins=[JoinConfig(table="join_table", alias="join_alias", on="sink_alias.id = join_alias.sink_id", type="inner")],
             filters=[FilterConfig(column="status", operator="=", value="active")],
-            batch_size=100
+            batch_size=100,
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
 
     def test_basic_functionality(self):
-        query = build_data_range_query(self.r_config, self.src_config)
+        query = build_data_range_query(self.src_config)
         self.assertEqual(query.select, [
             Field(expr="min(timestamp)", alias='start', type='column'),
             Field(expr="max(timestamp)", alias='end', type='column')
@@ -48,12 +48,12 @@ class TestBuildDataRangeQuery(unittest.TestCase):
     def test_no_joins_or_filters(self):
         src_config = SourceConfig(
             datastore="db1",
-            batch_size=100,
             table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias"),
             joins=[],
-            filters=[]
+            filters=[],
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
-        query = build_data_range_query(self.r_config, src_config)
+        query = build_data_range_query( src_config)
         self.assertEqual(query.select, [
             Field(expr="min(timestamp)", alias='start', type='column'),
             Field(expr="max(timestamp)", alias='end', type='column')
@@ -65,13 +65,13 @@ class TestBuildDataRangeQuery(unittest.TestCase):
         self.assertEqual(query.filters, [])
 
     def test_with_joins(self):
-        query = build_data_range_query(self.r_config, self.src_config)
+        query = build_data_range_query( self.src_config)
         self.assertEqual(query.joins, [
             Join(table="join_table", alias="join_alias", on="source_alias.id = join_alias.source_id", type="inner")
         ])
 
     def test_with_filters(self):
-        query = build_data_range_query(self.r_config, self.src_config)
+        query = build_data_range_query( self.src_config)
         self.assertEqual(query.filters, [
             Filter(column="status", operator="=", value="active")
         ])
@@ -79,15 +79,16 @@ class TestBuildDataRangeQuery(unittest.TestCase):
     def test_edge_case_empty_config(self):
         src_config = SourceConfig(
             datastore="db1",
-            batch_size=100,
-            table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias")
+            table=TableConfig(table="source_table", dbschema="source_schema", alias="source_alias"),
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
         sink_config = SinkConfig(
             datastore="db1",
             batch_size=100,
-            table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias")
+            table=TableConfig(table="sink_table", dbschema="sink_schema", alias="sink_alias"),
+            meta_columns=StoreMeta(partition_column="timestamp")
         )
-        query = build_data_range_query(self.r_config, src_config)
+        query = build_data_range_query( src_config)
         self.assertEqual(query.select, [
             Field(expr="min(timestamp)", alias='start', type='column'),
             Field(expr="max(timestamp)", alias='end', type='column')

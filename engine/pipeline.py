@@ -1,3 +1,6 @@
+from engine.reconcile import prepare_data_blocks
+from datetime import datetime
+from typing import Union
 import signal
 from typing import List
 from core.config import DatastoreConfig, ExternalStoreConfig, PipelineConfig, ReconciliationConfig
@@ -110,30 +113,26 @@ class Pipeline:
             self.sinkstate = get_adapter(config.sinkstate.datastore, datastores, config=config.sinkstate, role='sinkstate')
             self.sinkstate.connect()
 
-        self.external_stores = {}
-        if config.enrichment:
-            for e in config.enrichment:
-                if e.externalstore and e.externalstore not in self.external_stores:
-                    self.external_stores[e.externalstore] = get_external_adapter(e.externalstore, externalstores)
+        # self.external_stores = {}
+        # if config.enrichment:
+        #     for e in config.enrichment:
+        #         if e.externalstore and e.externalstore not in self.external_stores:
+        #             self.external_stores[e.externalstore] = get_external_adapter(e.externalstore, externalstores)
 
-    def connect_all(self):
-        self.source.connect()
-        self.sink.connect()
-        if self.sourcestate and self.sourcestate != self.source:
-            self.sourcestate.connect()
-        if self.sinkstate and self.sinkstate != self.sink:
-            self.sinkstate.connect()
-        for adapter in self.external_stores.values():
-            adapter.connect()
     
-    def run(self, recon_name='default'):
-        rconfig = next((p for p in self.config.reconciliation if p.name == recon_name), None)
-        start, end = self.resolve_start_end(rconfig)
+    def run(self, 
+        recon_name='default',
+        initial_partition_interval=None,
+        max_block_size: int= 1000,
+        interval_reduction_factor=10,
+        start: Union[int, str, datetime, None]=None,
+        end: Union[int, str, datetime, None]=None,
+        force_update=False
+    ):
+        rconfig: ReconciliationConfig | None = next((p for p in self.config.reconciliation if p.name == recon_name), None)
+        if not rconfig:
+            raise ValueError(f"Reconciliation config with name {recon_name} not found")
+        blocks, status = prepare_data_blocks(self, rconfig, initial_partition_interval, max_block_size, interval_reduction_factor, start, end, force_update)
 
-    def resolve_start_end(self, rconfig: ReconciliationConfig):
-        default_start = get_value(rconfig.start)
-        default_end = get_value(rconfig.end)
-
-        if not (default_start and default_end):
-            pass
+        load(self, rconfig, blocks, status)
 

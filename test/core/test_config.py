@@ -87,13 +87,13 @@ class TestConfigs(unittest.TestCase):
             },
             "batch_size": 100,
             "merge_strategy": {"strategy": "delete_insert", "allow_delete": True},
-            "unique_key": ["sname", "sid"],
+            "meta_columns": {"unique_columns": ["sname", "sid"]},
             "filters": [{"column": "order_total", "operator": ">", "value": 1000}],
             "fields": [{"column": "sname", "dtype": "str", "source_column": "u.name"}]
         }
         model = SinkConfig.model_validate(data)
         self.assertTrue(model.merge_strategy.allow_delete)
-        self.assertIn("sname", model.unique_key)
+        self.assertIn("sname", model.meta_columns.unique_columns)
         self.assertEqual(model.table.table, "users")
 
     def test_state_config_source(self):
@@ -118,17 +118,17 @@ class TestConfigs(unittest.TestCase):
             "start": "lambda: datetime.datetime(2020,2,1)",
             "end": "lambda: datetime.datetime.now()",
             "initial_partition_interval": 31536000,
-            "source_pfield": {
-                "partition_column": "created_at"
-            },
-            "sink_pfield": {
-                "partition_column": "created_at",
-                "hash_column": "checksum"
-            }
+            # "source_meta_columns": {
+            #     "partition_column": "created_at"
+            # },
+            # "sink_meta_columns": {
+            #     "partition_column": "created_at",
+            #     "hash_column": "checksum"
+            # }
         }
         model = ReconciliationConfig.model_validate(data)
         self.assertEqual(model.strategy, "md5sum_hash")
-        self.assertEqual(model.source_state_pfield, model.source_pfield)
+        # self.assertEqual(model.source_state_meta_columns, model.source_meta_columns)
 
     
         
