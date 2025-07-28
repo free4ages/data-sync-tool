@@ -1,4 +1,4 @@
-# DataSyncTool
+# DataSyncTool (Work In progress)
 
 DataSyncTool is a powerful and flexible data synchronization tool designed to efficiently move and transform data across various database systems and external services.
 
